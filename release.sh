@@ -1,4 +1,5 @@
 #!/bin/bash
+#chmod +x release.sh
 set -euo pipefail
 
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
