@@ -1,0 +1,77 @@
+name: Release FlickerGuard
+
+on:
+  push:
+    tags:
+      - '[0-9]*'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - run: |
+          bash -n release.sh
+          shellcheck release.sh
+          python3 scripts/check-release.py
+
+  build:
+    needs: validate
+    runs-on: xcode-27
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Verify and build
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          bash -n release.sh
+          ruby -rpsych -e 'Psych.parse_file(".github/workflows/release.yml")'
+          python3 - <<'PY'
+          import os, pathlib, re
+          version = pathlib.Path("Sources/FlickerGuard/Resources/Version.txt").read_text().strip()
+          assert re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", version)
+          assert version == os.environ["RELEASE_TAG"]
+          PY
+          swift test
+          python3 scripts/build-app.py
+          codesign --verify --strict .build/FlickerGuard.app
+          ditto -c -k --sequesterRsrc --keepParent .build/FlickerGuard.app .build/FlickerGuard.app.zip
+          unzip -t .build/FlickerGuard.app.zip
+
+      - name: Attest build provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: .build/FlickerGuard.app.zip
+
+      - name: Publish app
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          cat > .build/release-notes.md <<'NOTES'
+          Application macOS 27 ou ultérieur, Apple Silicon. Décompresser le ZIP, déplacer FlickerGuard.app dans Applications et lancer l'app depuis la barre des menus.
+
+          Prototype : seul l'écran interne Mac17,13, APP 0x0610 / 0xA068, est reconnu. L'absence de scintillement n'a pas été mesurée.
+
+          Signature ad hoc, sans notarisation Apple. Après le premier lancement bloqué : Réglages Système → Confidentialité et sécurité → Ouvrir quand même. À l'activation, autoriser aussi l'Accessibilité pour les touches de luminosité.
+
+          macOS 27+, Apple Silicon. Unzip, move FlickerGuard.app to Applications, then launch it. Only the internal Mac17,13 display (APP 0x0610 / 0xA068) is recognized. Flicker reduction has not been measured. Ad hoc signed, not notarized: use System Settings → Privacy & Security → Open Anyway after the first blocked launch. Accessibility permission is required for brightness keys.
+
+          Build provenance: gh attestation verify FlickerGuard.app.zip --repo tcrouzet/FlickerGuard
+          NOTES
+          gh release create "$RELEASE_TAG" .build/FlickerGuard.app.zip \
+            --verify-tag --prerelease --title "FlickerGuard $RELEASE_TAG" --notes-file .build/release-notes.md
