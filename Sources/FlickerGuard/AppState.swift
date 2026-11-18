@@ -10,6 +10,9 @@ final class AppState: ObservableObject {
     @Published private var settings = SoftwareBrightnessSettings()
     @Published private(set) var errorMessage: String?
     @Published private(set) var launchAtLoginStatus = SMAppService.Status.notRegistered
+    @Published private(set) var checkingForUpdates = false
+    @Published private(set) var updateAvailable = false
+    @Published var updateMessage: String?
     @Published private var resumeState = DisplayResumeState()
     @Published private var tableCorrectionCount = 0
 
@@ -69,6 +72,22 @@ final class AppState: ObservableObject {
          tr("report.automatic", ["value": automaticAdjustment ? tr("ui.on") : tr("ui.off")]),
          tr("report.tableCorrections", ["count": tableCorrectionCount.formatted()]),
          errorMessage.map { tr("report.error", ["error": $0]) }].compactMap { $0 } + automatic).joined(separator: "\n")
+    }
+
+    func checkForUpdates() async {
+        guard !checkingForUpdates else { return }
+        checkingForUpdates = true
+        updateAvailable = false
+        defer { checkingForUpdates = false }
+        do {
+            let latest = try await UpdateChecker.latestVersion()
+            updateAvailable = try UpdateChecker.isNewer(latest, than: AppInfo.version)
+            updateMessage = updateAvailable
+                ? tr("ui.updateAvailable", ["version": latest, "current": AppInfo.version])
+                : tr("ui.upToDate", ["version": AppInfo.version])
+        } catch {
+            updateMessage = tr("ui.updateFailed", ["error": error.localizedDescription])
+        }
     }
 
     func installSafetyObservers() {

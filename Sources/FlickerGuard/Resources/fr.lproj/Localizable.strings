@@ -8,7 +8,15 @@
 "ui.enable" = "Activer";
 "ui.disable" = "Désactiver";
 "ui.restore" = "Restaurer l’affichage original";
-"ui.refresh" = "Actualiser les informations d’écran";
+"ui.checkUpdates" = "Rechercher des mises à jour…";
+"ui.checkingUpdates" = "Recherche de mises à jour…";
+"ui.documentation" = "Documentation sur GitHub";
+"ui.reportIssue" = "Signaler un problème…";
+"ui.downloadUpdate" = "Télécharger la mise à jour";
+"ui.updateAvailable" = "FlickerGuard {version} est disponible. Tu utilises la version {current}.";
+"ui.upToDate" = "FlickerGuard {version} est à jour.";
+"ui.updateFailed" = "Impossible de rechercher les mises à jour. {error}";
+"ui.ok" = "OK";
 "ui.copy" = "Copier le diagnostic";
 "ui.more" = "Autres actions";
 "ui.quit" = "Quitter FlickerGuard";

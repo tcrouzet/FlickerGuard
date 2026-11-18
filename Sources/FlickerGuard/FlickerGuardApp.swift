@@ -67,14 +67,21 @@ private struct DiagnosticView: View {
                 }
                 Spacer()
                 Menu {
-                    Button(tr("ui.refresh"), systemImage: "arrow.clockwise") { state.refresh() }
+                    Button(state.checkingForUpdates ? tr("ui.checkingUpdates") : tr("ui.checkUpdates"), systemImage: "arrow.down.circle") {
+                        Task { await state.checkForUpdates() }
+                    }
+                    .disabled(state.checkingForUpdates)
+                    Link(destination: AppInfo.documentationURL) {
+                        Label(tr("ui.documentation"), systemImage: "book")
+                    }
+                    Link(destination: AppInfo.issuesURL) {
+                        Label(tr("ui.reportIssue"), systemImage: "exclamationmark.bubble")
+                    }
+                    Divider()
                     Button(tr("ui.copy"), systemImage: "doc.on.doc") {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(state.report, forType: .string)
                     }
-                    Button(tr("ui.restore"), systemImage: "arrow.counterclockwise") { state.restoreOriginal() }
-                        .disabled(!state.needsRestoration)
-                    Button(tr("ui.permissions"), systemImage: "lock.shield") { openAccessibilitySettings() }
                     Divider()
                     Button(tr("ui.quit"), systemImage: "power") { NSApplication.shared.terminate(nil) }
                 } label: {
@@ -173,6 +180,17 @@ private struct DiagnosticView: View {
         .padding(20)
         .frame(width: 340)
         .onAppear { state.refreshLaunchAtLogin() }
+        .alert(tr("ui.checkUpdates"), isPresented: Binding(
+            get: { state.updateMessage != nil },
+            set: { if !$0 { state.updateMessage = nil } }
+        )) {
+            if state.updateAvailable {
+                Button(tr("ui.downloadUpdate")) { NSWorkspace.shared.open(AppInfo.downloadURL) }
+            }
+            Button(tr("ui.ok"), role: .cancel) { }
+        } message: {
+            Text(state.updateMessage ?? "")
+        }
     }
 
     private func openAccessibilitySettings() {

@@ -8,7 +8,7 @@ Requires **macOS 27 or later** and a **14-inch or 16-inch MacBook Pro with a PRO
 
 ## Install
 
-1. [Download FlickerGuard](https://github.com/tcrouzet/FlickerGuard/releases) and choose **FlickerGuard.app.zip** under Assets.
+1. [Download FlickerGuard.app.zip](https://github.com/tcrouzet/FlickerGuard/releases/latest/download/FlickerGuard.app.zip).
 2. Unzip it and move **FlickerGuard.app** to **Applications**.
 3. Open the app. Its sun icon appears in the menu bar.
 
@@ -37,6 +37,8 @@ If the screen is too bright in automatic mode, move the slider to a comfortable 
 
 If the app reports no compatible OLED display, your screen is not currently supported. FlickerGuard leaves its settings unchanged.
 
-For other problems, choose **Copy diagnostic** from the **…** menu and include it in a [GitHub issue](https://github.com/tcrouzet/FlickerGuard/issues).
+The **…** menu provides **Check for Updates**, **Documentation on GitHub**, and **Report a problem**. When an update is available, choose **Download update**, then replace the app in Applications after quitting FlickerGuard.
+
+To report a problem, choose **Copy diagnostic** from the same menu and include it in your issue.
 
 [MIT license](LICENSE).
