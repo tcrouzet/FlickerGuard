@@ -12,7 +12,8 @@ import Testing
     #expect(BrightnessKeyAction.increase.level(from: 0.5) == 0.5625)
     #expect(BrightnessKeyAction.decrease.level(from: 0.5) == 0.4375)
     #expect(BrightnessKeyAction.increase.level(from: 0.99) == 1)
-    #expect(BrightnessKeyAction.decrease.level(from: 0.11) == 0.1)
+    #expect(BrightnessKeyAction.decrease.level(from: 0.02) == 0.01)
+    #expect(BrightnessKeyAction.decrease.level(from: 0.01) == 0.01)
 }
 
 @Test func brightnessReleasesAreConsumedWithoutChangingTheLevel() {

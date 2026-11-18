@@ -4,6 +4,7 @@ import re
 import shutil
 import subprocess
 import sys
+import zipfile
 
 root = Path(__file__).resolve().parent.parent
 version = (root / "Sources/FlickerGuard/Resources/Version.txt").read_text().strip()
@@ -24,11 +25,15 @@ staged_binary.replace(contents / "MacOS/FlickerGuard")
 resource_bundle = "FlickerGuard_FlickerGuard.bundle"
 shutil.copytree(binary_directory / resource_bundle, contents / "Resources" / resource_bundle, dirs_exist_ok=True)
 shutil.copy2(root / "LICENSE", contents / "Resources/LICENSE")
+iconset = root / ".build/AppIcon.iconset"
+subprocess.run(["swift", str(root / "scripts/create-icon.swift"), str(iconset)], cwd=root, check=True)
+subprocess.run(["iconutil", "--convert", "icns", "--output", str(contents / "Resources/AppIcon.icns"), str(iconset)], check=True)
 info = {
     "CFBundleIdentifier": "com.tcrouzet.FlickerGuard",
     "CFBundleName": "FlickerGuard",
     "CFBundleExecutable": "FlickerGuard",
     "CFBundlePackageType": "APPL",
+    "CFBundleIconFile": "AppIcon.icns",
     "CFBundleShortVersionString": version,
     "CFBundleVersion": version,
     "CFBundleDevelopmentRegion": "en",
@@ -44,4 +49,12 @@ for language in info["CFBundleLocalizations"]:
 assert (contents / "Resources" / resource_bundle / "Contents/Resources/Version.txt").read_text().strip() == version
 subprocess.run(["codesign", "--force", "--sign", "-", "--identifier", info["CFBundleIdentifier"], str(app)], check=True)
 subprocess.run(["codesign", "--verify", "--strict", str(app)], check=True)
+archive = root / ".build/FlickerGuard.app.zip"
+subprocess.run(["ditto", "-c", "-k", "--norsrc", "--keepParent", str(app), str(archive)], check=True)
+with zipfile.ZipFile(archive) as package:
+    assert package.testzip() is None
+    assert all(name.startswith("FlickerGuard.app/") for name in package.namelist())
+    for required in ["Contents/MacOS/FlickerGuard", "Contents/Info.plist", "Contents/Resources/AppIcon.icns"]:
+        assert "FlickerGuard.app/" + required in package.namelist()
 print(app)
+print(archive)

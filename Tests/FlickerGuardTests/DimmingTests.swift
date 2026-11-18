@@ -40,7 +40,7 @@ private func dimmingDiagnostic(
 
 @Test func softwareCurveRejectsUnsafeAndNonFiniteLevels() throws {
     let original = try TransferTable(red: [0, 1], green: [0, 1], blue: [0, 1])
-    for level: Double in [.nan, .infinity, -.infinity, -1, 0, 0.099, 1.001] {
+    for level: Double in [.nan, .infinity, -.infinity, -1, 0, 0.009, 1.001] {
         #expect(throws: DimmingError.self) { try BrightnessCurve.table(from: original, level: level) }
     }
 }
@@ -170,7 +170,8 @@ private final class TestDisplayControl: DisplayControl {
     }
 }
 
-@Test func activationAndDeactivationRestoreHardwareAutomationAndOriginalTable() throws {
+@Test(arguments: ["Mac17,13", "Mac17,11", "Mac17,12", "Mac17,10"])
+func activationAndDeactivationRestoreHardwareAutomationAndOriginalTable(macModel: String) throws {
     for originalAutomatic in [true, false] {
         let control = try TestDisplayControl()
         control.state.withLock { $0.automatic = originalAutomatic }
@@ -178,7 +179,7 @@ private final class TestDisplayControl: DisplayControl {
         let controller = DisplayTransferController(control: control)
         for _ in 0..<2 {
             control.state.withLock { $0.writes = [] }
-            try controller.prepare(dimmingDiagnostic(level: 0.42), level: 0.63)
+            try controller.prepare(dimmingDiagnostic(level: 0.42, macModel: macModel), level: 0.63)
             #expect(controller.needsRestoration)
             #expect(control.state.withLock { $0.writes } == [.table, .automatic(false), .table, .brightness(1)])
             #expect(control.state.withLock { $0.table } == (try BrightnessCurve.table(from: original, level: 0.63)))
@@ -265,4 +266,38 @@ private final class TestDisplayControl: DisplayControl {
     #expect(throws: HardwareBrightnessError.self) { try controller.apply(level: 0.4) }
     try controller.restore()
     #expect(!controller.needsRestoration)
+}
+
+@Test func externallyReplacedSoftwareTableIsRepairedOnlyWhenDifferent() throws {
+    let control = try TestDisplayControl()
+    let baseline = control.state.withLock { $0.table }
+    let controller = DisplayTransferController(control: control)
+    try controller.prepare(dimmingDiagnostic(), level: 0.2)
+    control.state.withLock { $0.writes = [] }
+    #expect(try !controller.ensureSoftwareLevel(0.2))
+    #expect(control.state.withLock { $0.writes.isEmpty })
+    control.state.withLock { $0.table = baseline }
+    #expect(try controller.ensureSoftwareLevel(0.2))
+    #expect(control.state.withLock { $0.table } == (try BrightnessCurve.table(from: baseline, level: 0.2)))
+    #expect(control.state.withLock { $0.writes } == [.table])
+    #expect(try !controller.ensureSoftwareLevel(0.2))
+    #expect(control.state.withLock { $0.writes } == [.table])
+    try controller.restore()
+    #expect(control.state.withLock { $0.table } == baseline)
+}
+
+@Test func softwareTableRepairStillRequiresHardwareMaximumAndValidBackup() throws {
+    let control = try TestDisplayControl()
+    let controller = DisplayTransferController(control: control)
+    #expect(throws: DimmingError.self) { try controller.ensureSoftwareLevel(0.2) }
+    try controller.prepare(dimmingDiagnostic(), level: 0.2)
+    control.state.withLock { $0.brightness = 0.5; $0.writes = [] }
+    #expect(throws: DimmingError.self) { try controller.ensureSoftwareLevel(0.2) }
+    #expect(control.state.withLock { $0.writes.isEmpty })
+    control.state.withLock { $0.brightness = 1 }
+    try #require(controller.restoreBeforeReconfiguration(displayID: 1)).get()
+    #expect(controller.isReconfiguring)
+    #expect(throws: DimmingError.self) { try controller.ensureSoftwareLevel(0.2) }
+    try controller.restore()
+    #expect(!controller.isReconfiguring)
 }

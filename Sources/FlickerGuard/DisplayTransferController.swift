@@ -47,8 +47,11 @@ enum DimmingEligibility {
 }
 
 enum BrightnessCurve {
+    static let minimumLevel = 0.01
+    static let range = minimumLevel...1
+
     static func table(from original: TransferTable, level: Double) throws -> TransferTable {
-        guard level.isFinite, (0.1...1).contains(level) else { throw DimmingError.invalidLevel }
+        guard level.isFinite, range.contains(level) else { throw DimmingError.invalidLevel }
         let factor = Float(level)
         return try TransferTable(
             red: original.red.map { $0 * factor },
@@ -126,6 +129,7 @@ final class DisplayTransferController: Sendable {
     init(control: any DisplayControl = SystemDisplayControl()) { self.control = control }
 
     var needsRestoration: Bool { original.withLock { $0 != nil } }
+    var isReconfiguring: Bool { original.withLock { $0?.tableRestored == true } }
 
     func prepare(_ diagnostic: DisplayDiagnostic, level: Double = 1) throws {
         let display = try DimmingEligibility.validate(diagnostic)
@@ -158,6 +162,20 @@ final class DisplayTransferController: Sendable {
             guard !saved.tableRestored else { throw DimmingError.restorationRequired }
             try requireMaximumBrightness(saved.display.displayID)
             try write(BrightnessCurve.table(from: saved.table, level: level), to: saved)
+        }
+    }
+
+    @discardableResult
+    func ensureSoftwareLevel(_ level: Double) throws -> Bool {
+        try original.withLock { saved in
+            guard let saved else { throw DimmingError.inactive }
+            guard !saved.tableRestored else { throw DimmingError.restorationRequired }
+            let expected = try BrightnessCurve.table(from: saved.table, level: level)
+            try validateCurrentDisplay(saved)
+            try requireMaximumBrightness(saved.display.displayID)
+            guard !BrightnessCurve.matches(try control.readTable(saved.display.displayID), expected) else { return false }
+            try write(expected, to: saved)
+            return true
         }
     }
 

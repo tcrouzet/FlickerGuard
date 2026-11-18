@@ -59,9 +59,30 @@ private let signature = OLEDDisplaySignature(
     #expect(diagnostic.report.contains(tr("diag.macModel", ["value": "Mac17,13"])))
 }
 
+@Test(arguments: ["Mac17,10", "Mac17,11", "Mac17,12"])
+func additionalPROLEDModelsRecognizeInternalApplePanels(macModel: String) {
+    for product: UInt32 in [1234, 5678] {
+        #expect(OLEDSignatureDatabase.recognizes(display(
+            vendor: 0x0610, product: product, manufacturer: "APP", macModel: macModel
+        )))
+    }
+}
+
+@Test(arguments: ["Mac17,10", "Mac17,11", "Mac17,12"])
+func additionalPROLEDModelsStillRequireValidInternalApplePanels(macModel: String) {
+    #expect(!OLEDSignatureDatabase.recognizes(display(builtin: false, vendor: 0x0610, manufacturer: "APP", macModel: macModel)))
+    #expect(!OLEDSignatureDatabase.recognizes(display(vendor: 0x0611, manufacturer: "APP", macModel: macModel)))
+    for manufacturer: String? in [nil, "Other manufacturer"] {
+        #expect(!OLEDSignatureDatabase.recognizes(display(vendor: 0x0610, manufacturer: manufacturer, macModel: macModel)))
+    }
+    for product: UInt32 in [0, 0x717] {
+        #expect(!OLEDSignatureDatabase.recognizes(display(vendor: 0x0610, product: product, manufacturer: "APP", macModel: macModel)))
+    }
+}
+
 @Test func reportedPanelIDsRequireTheVerifiedMacAndInternalDisplay() {
     #expect(!OLEDSignatureDatabase.recognizes(display(builtin: false, vendor: 0x0610, product: 0xA068, manufacturer: "APP", macModel: "Mac17,13")))
-    for macModel: String? in [nil, "Mac17,9", "Mac17,11", "Unknown Mac"] {
+    for macModel: String? in [nil, "Mac17,6", "Mac17,7", "Mac17,8", "Mac17,9", "Mac17,14", "Unknown Mac"] {
         #expect(!OLEDSignatureDatabase.recognizes(display(vendor: 0x0610, product: 0xA068, manufacturer: "APP", macModel: macModel)))
     }
     #expect(!OLEDSignatureDatabase.recognizes(display(vendor: 0x0610, product: 0xA067, manufacturer: "APP", macModel: "Mac17,13")))

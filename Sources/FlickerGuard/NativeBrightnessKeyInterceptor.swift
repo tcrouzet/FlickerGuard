@@ -20,7 +20,7 @@ enum BrightnessKeyAction: Equatable, Sendable {
     func level(from current: Double) -> Double? {
         switch self {
         case .increase: min(1, current + 1.0 / 16)
-        case .decrease: max(0.1, current - 1.0 / 16)
+        case .decrease: max(BrightnessCurve.minimumLevel, current - 1.0 / 16)
         case .release, .unsupported: nil
         }
     }

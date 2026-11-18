@@ -1,6 +1,7 @@
 import AppKit
 import Darwin
 import SwiftUI
+import ServiceManagement
 
 @main
 struct FlickerGuardApp: App {
@@ -87,7 +88,7 @@ private struct DiagnosticView: View {
             }
             HStack(spacing: 6) {
                 Circle().fill(state.isActive ? Color.green : Color.secondary).frame(width: 6, height: 6)
-                Text(state.needsRestoration && !state.isActive ? tr("ui.restoreRequired") : state.isActive ? (state.isAttenuating ? tr("ui.active") : tr("ui.noDimming")) : tr("ui.inactive"))
+                Text(state.needsRestoration && !state.isActive ? tr("ui.restoreRequired") : state.isResuming ? tr("ui.resuming") : state.isActive ? (state.isAttenuating ? tr("ui.active") : tr("ui.noDimming")) : tr("ui.inactive"))
                 Spacer(minLength: 8)
                 Text(state.diagnostic.isRecognizedOLED ? tr("ui.oledDetected") : tr("ui.oledUnavailable"))
                     .foregroundStyle(.secondary)
@@ -100,10 +101,20 @@ private struct DiagnosticView: View {
                 Text(state.softwareLevelText)
                     .font(.system(size: 44, weight: .light, design: .rounded))
                     .monospacedDigit()
-                Slider(value: Binding(get: { state.softwareLevel }, set: { state.setSoftwareLevel($0) }), in: 0.1...1, step: 0.01)
+                Slider(value: Binding(get: { state.softwareLevel }, set: { state.setSoftwareLevel($0) }), in: BrightnessCurve.range, step: 0.01)
                     .disabled(!state.isActive)
                     .accessibilityLabel(tr("ui.software"))
                     .accessibilityValue(state.softwareLevelText)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle(tr("ui.launchAtLogin"), isOn: Binding(get: { state.launchAtLogin }, set: { state.setLaunchAtLogin($0) }))
+                    .toggleStyle(.switch)
+                if state.launchAtLoginStatus == .requiresApproval {
+                    Button(tr("ui.loginApproval")) { SMAppService.openSystemSettingsLoginItems() }
+                        .buttonStyle(.link)
+                        .font(.caption)
+                }
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -113,6 +124,9 @@ private struct DiagnosticView: View {
                 Text(state.automaticAdjustment ? tr("ui.automaticHelp") : tr("ui.manualHelp"))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                Text(state.ambientLightText)
+                    .font(.caption).foregroundStyle(.secondary)
+                    .monospacedDigit()
             }
 
             HStack {
@@ -126,7 +140,7 @@ private struct DiagnosticView: View {
             .padding(12)
             .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
 
-            if let message = state.errorMessage ?? (!state.isActive ? state.activationProblem : nil) {
+            if let message = state.errorMessage ?? (!state.isActive && !state.isResuming ? state.activationProblem : nil) {
                 Label(message, systemImage: "exclamationmark.triangle")
                     .font(.caption)
                     .foregroundStyle(.orange)
@@ -134,16 +148,16 @@ private struct DiagnosticView: View {
             }
 
             Button {
-                if state.isActive || state.needsRestoration { state.restoreOriginal() }
+                if state.isActive || state.isResuming || state.needsRestoration { state.restoreOriginal() }
                 else { state.activate() }
             } label: {
-                Label(state.needsRestoration && !state.isActive ? tr("ui.restore") : state.isActive ? tr("ui.disable") : tr("ui.enable"),
-                      systemImage: state.needsRestoration && !state.isActive ? "arrow.counterclockwise" : state.isActive ? "pause.fill" : "play.fill")
+                Label(state.needsRestoration && !state.isActive ? tr("ui.restore") : state.isActive || state.isResuming ? tr("ui.disable") : tr("ui.enable"),
+                      systemImage: state.needsRestoration && !state.isActive ? "arrow.counterclockwise" : state.isActive || state.isResuming ? "pause.fill" : "play.fill")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
-            .disabled(!state.isActive && !state.needsRestoration && state.activationProblem != nil)
+            .disabled(!state.isActive && !state.isResuming && !state.needsRestoration && state.activationProblem != nil)
 
             if !state.hasKeyPermission {
                 VStack(alignment: .leading, spacing: 6) {
@@ -158,6 +172,7 @@ private struct DiagnosticView: View {
         }
         .padding(20)
         .frame(width: 340)
+        .onAppear { state.refreshLaunchAtLogin() }
     }
 
     private func openAccessibilitySettings() {

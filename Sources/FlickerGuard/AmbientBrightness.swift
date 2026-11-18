@@ -38,18 +38,18 @@ enum AmbientLightReader {
 }
 
 struct AmbientBrightness {
-    static let responsePerDoubling = 0.3
+    static let responsePerDoubling = 0.1
     let referenceLux: Double
     let referenceLevel: Double
 
     init() {
         referenceLux = 100
-        referenceLevel = 0.8
+        referenceLevel = 0.25
     }
 
     init(lux: Double, level: Double) throws {
         referenceLux = try Self.validateLux(lux)
-        guard level.isFinite, (0.1...1).contains(level) else { throw DimmingError.invalidLevel }
+        guard level.isFinite, BrightnessCurve.range.contains(level) else { throw DimmingError.invalidLevel }
         referenceLevel = level
     }
 
@@ -61,20 +61,20 @@ struct AmbientBrightness {
 
     func requestedLevel(for lux: Double) throws -> Double {
         try Self.validateLux(lux)
-        // shortcut: this calibrated curve approximates macOS; replace it if a safe native target becomes available.
-        return min(1, max(0.1, referenceLevel + log2((lux + 1) / (referenceLux + 1)) * Self.responsePerDoubling))
+        // shortcut: this software-only curve needs display measurements for physical luminance calibration.
+        return min(1, max(BrightnessCurve.minimumLevel, referenceLevel + log2((lux + 1) / (referenceLux + 1)) * Self.responsePerDoubling))
     }
 
     func level(for lux: Double, from current: Double) throws -> Double {
         let target = try requestedLevel(for: lux)
-        guard current.isFinite, (0.1...1).contains(current) else { throw DimmingError.invalidLevel }
+        guard current.isFinite, BrightnessCurve.range.contains(current) else { throw DimmingError.invalidLevel }
         let difference = target - current
-        guard abs(difference) >= 0.01 || target == 1 || target == 0.1 else { return current }
+        guard abs(difference) >= 0.01 || target == 1 || target == BrightnessCurve.minimumLevel else { return current }
         return try Self.step(toward: target, from: current)
     }
 
     static func step(toward target: Double, from current: Double) throws -> Double {
-        guard target.isFinite, current.isFinite, (0.1...1).contains(target), (0.1...1).contains(current) else {
+        guard target.isFinite, current.isFinite, BrightnessCurve.range.contains(target), BrightnessCurve.range.contains(current) else {
             throw DimmingError.invalidLevel
         }
         let difference = target - current
@@ -93,13 +93,13 @@ struct AmbientBrightnessStabilizer {
     var isWaiting: Bool { pending != nil }
 
     mutating func target(for requested: Double, at date: Date) throws -> Double {
-        guard requested.isFinite, (0.1...1).contains(requested) else { throw DimmingError.invalidLevel }
+        guard requested.isFinite, BrightnessCurve.range.contains(requested) else { throw DimmingError.invalidLevel }
         guard let acceptedLevel else {
             self.acceptedLevel = requested
             return requested
         }
         let difference = requested - acceptedLevel
-        let atLimit = requested == 0.1 || requested == 1
+        let atLimit = requested == BrightnessCurve.minimumLevel || requested == 1
         guard requested != acceptedLevel, abs(difference) >= Self.changeThreshold || atLimit else {
             pending = nil
             return acceptedLevel
@@ -132,9 +132,17 @@ struct AmbientBrightnessDiagnostic {
     private var lastAdjustment: Date?
     private var stabilizer = AmbientBrightnessStabilizer()
 
+    var measuredLux: Double? { observation?.lux }
+
+    mutating func retainLevel(_ level: Double) throws {
+        var retained = AmbientBrightnessDiagnostic()
+        _ = try retained.stabilizer.target(for: level, at: .distantPast)
+        self = retained
+    }
+
     mutating func observe(lux: Double, curve: AmbientBrightness, current: Double, at date: Date = Date()) throws -> Double {
         let target = try curve.requestedLevel(for: lux)
-        guard current.isFinite, (0.1...1).contains(current) else { throw DimmingError.invalidLevel }
+        guard current.isFinite, BrightnessCurve.range.contains(current) else { throw DimmingError.invalidLevel }
         let accepted = try stabilizer.target(for: target, at: date)
         let next = try AmbientBrightness.step(toward: accepted, from: current)
         observation = Observation(lux: lux, curve: curve, current: current, target: target, accepted: accepted,
@@ -174,12 +182,13 @@ struct SoftwareBrightnessSettings {
     var automatic = true
     private var hasPreviousLevel = false
 
-    func activationLevel(hardware: HardwareBrightness, ambientLux: Double?) throws -> Double {
+    func activationLevel(hardware: HardwareBrightness, ambientLux: Double?, resuming: Bool = false) throws -> Double {
+        if resuming { return level }
         if automatic {
             guard let ambientLux else { throw AmbientLightError.unavailable }
             return try AmbientBrightness().requestedLevel(for: ambientLux)
         }
-        return hasPreviousLevel ? level : max(0.1, Double(hardware.level))
+        return hasPreviousLevel ? level : max(BrightnessCurve.minimumLevel, Double(hardware.level))
     }
 
     mutating func selectManual(_ level: Double) throws {
@@ -188,7 +197,7 @@ struct SoftwareBrightnessSettings {
     }
 
     mutating func remember(_ level: Double) throws {
-        guard level.isFinite, (0.1...1).contains(level) else { throw DimmingError.invalidLevel }
+        guard level.isFinite, BrightnessCurve.range.contains(level) else { throw DimmingError.invalidLevel }
         self.level = level
         hasPreviousLevel = true
     }

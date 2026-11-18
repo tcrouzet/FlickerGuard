@@ -48,8 +48,6 @@ jobs:
           swift test
           python3 scripts/build-app.py
           codesign --verify --strict .build/FlickerGuard.app
-          ditto -c -k --sequesterRsrc --keepParent .build/FlickerGuard.app .build/FlickerGuard.app.zip
-          unzip -t .build/FlickerGuard.app.zip
 
       - name: Attest build provenance
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
@@ -62,16 +60,15 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          cat > .build/release-notes.md <<'NOTES'
-          Application macOS 27 ou ultérieur, Apple Silicon. Décompresser le ZIP, déplacer FlickerGuard.app dans Applications et lancer l'app depuis la barre des menus.
+          printf '[Download FlickerGuard.app.zip](https://github.com/tcrouzet/FlickerGuard/releases/download/%s/FlickerGuard.app.zip)\n\n' "$RELEASE_TAG" > .build/release-notes.md
+          cat >> .build/release-notes.md <<'NOTES'
+          Requires macOS 27 or later and Apple Silicon. Unzip the download, move FlickerGuard.app to Applications, and open it. Click the sun in the menu bar to enable dimming.
 
-          Prototype : seul l'écran interne Mac17,13, APP 0x0610 / 0xA068, est reconnu. L'absence de scintillement n'a pas été mesurée.
+          Supports the built-in OLED displays of the 14-inch and 16-inch MacBook Pro with PROLED XDR.
 
-          Signature ad hoc, sans notarisation Apple. Après le premier lancement bloqué : Réglages Système → Confidentialité et sécurité → Ouvrir quand même. À l'activation, autoriser aussi l'Accessibilité pour les touches de luminosité.
-
-          macOS 27+, Apple Silicon. Unzip, move FlickerGuard.app to Applications, then launch it. Only the internal Mac17,13 display (APP 0x0610 / 0xA068) is recognized. Flicker reduction has not been measured. Ad hoc signed, not notarized: use System Settings → Privacy & Security → Open Anyway after the first blocked launch. Accessibility permission is required for brightness keys.
+          The app is not notarized by Apple. If macOS blocks the first launch, use System Settings → Privacy & Security → Open Anyway. Allow Accessibility access when activating brightness key control.
 
           Build provenance: gh attestation verify FlickerGuard.app.zip --repo tcrouzet/FlickerGuard
           NOTES
           gh release create "$RELEASE_TAG" .build/FlickerGuard.app.zip \
-            --verify-tag --prerelease --title "FlickerGuard $RELEASE_TAG" --notes-file .build/release-notes.md
+            --verify-tag --latest --title "FlickerGuard $RELEASE_TAG" --notes-file .build/release-notes.md
