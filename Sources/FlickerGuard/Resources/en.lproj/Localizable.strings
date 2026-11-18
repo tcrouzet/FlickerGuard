@@ -24,14 +24,14 @@
 "ui.noExcludedApplications" = "No applications selected";
 "ui.addExcludedApplications" = "Add applications…";
 "ui.removeExcludedApplication" = "Remove {app}";
-"ui.pauseBrowserFullscreen" = "Pause when a browser is full screen";
-"ui.pauseBrowserFullscreenHelp" = "Applies to any browser window that fills the built-in display, including Netflix and Prime Video. It also applies when no video is playing.";
+"ui.pauseBrowserFullscreen" = "Pause in browser player full screen";
+"ui.pauseBrowserFullscreenHelp" = "Pauses when full-screen content hides the browser’s tabs and toolbars. A browser window with its controls visible stays dimmed. Changes must remain stable for two seconds.";
 "ui.applicationPaused" = "Paused for an app";
 "status.applicationPaused" = "FlickerGuard is paused for {app}. Your previous software level will resume when you leave.";
 "error.applicationExcluded" = "Leave {app} to enable FlickerGuard.";
 "error.excludedApplication" = "Unable to add {app}. Select an application with its own identifier, other than FlickerGuard.";
 "report.applicationExclusions" = "Applications in the automatic pause list: {count}";
-"report.browserFullscreen" = "Pause for full-screen browsers: {value}";
+"report.browserFullscreen" = "Pause for browser player full screen: {value}";
 "ui.quit" = "Quit FlickerGuard";
 "ui.permissions" = "Open Accessibility settings";
 "ui.keyPermission" = "After installing or updating, allow FlickerGuard in Privacy & Security → Accessibility, then quit and reopen the app. Already allowed but still blocked? See Installation help.";

@@ -34,7 +34,10 @@ final class AppState: ObservableObject {
     private var lidWasClosed = false
     private var workspaceObservers: [NSObjectProtocol] = []
     private var lastExternalApplication: NSRunningApplication?
-    private var lastContextBundleIdentifier: String?
+    private var browserPauseState = BrowserPauseState()
+    private var browserInspectionTask: Task<Void, Never>?
+    private var browserInspectionContext: String?
+    private var lastBrowserInspection = Date.distantPast
     private var lastApplicationContextRead = Date.distantPast
     @Published private var configurationObserverInstalled = false
 
@@ -142,6 +145,8 @@ final class AppState: ObservableObject {
     }
 
     func removeSafetyObservers() {
+        browserInspectionTask?.cancel()
+        browserInspectionTask = nil
         resumeTask?.cancel()
         resumeTask = nil
         resumeState.cancel()
@@ -294,6 +299,10 @@ final class AppState: ObservableObject {
     }
 
     private func suspendForInterruption(sleeping: Bool) {
+        if sleeping {
+            browserInspectionTask?.cancel()
+            browserInspectionTask = nil
+        }
         let wasActive = isActive || resumeState.pending
         _ = restoreOriginal()
         resumeState.interrupt(wasActive: wasActive, sleeping: sleeping)
@@ -365,22 +374,53 @@ final class AppState: ObservableObject {
 
     private func refreshApplicationExclusion() {
         lastApplicationContextRead = Date()
+        guard !resumeState.sleeping, LidStateReader.isClosed() != true else { return }
         if let frontmost = NSWorkspace.shared.frontmostApplication,
+           frontmost.activationPolicy == .regular,
            frontmost.bundleIdentifier != "com.tcrouzet.FlickerGuard" {
             lastExternalApplication = frontmost
         }
         guard let application = lastExternalApplication, let identifier = application.bundleIdentifier else { return }
-        var fullscreen: Bool? = false
+        let name = excludedApplications[identifier] ?? application.localizedName ?? identifier
         if pauseBrowserFullscreen, excludedApplications[identifier] == nil,
            BrowserFullscreenReader.isBrowser(identifier), let display = diagnostic.display {
-            fullscreen = BrowserFullscreenReader.isFullscreen(pid: application.processIdentifier, displayID: display.displayID)
+            let pid = application.processIdentifier
+            let displayID = display.displayID
+            let context = "\(identifier):\(pid)"
+            applyApplicationExclusion(browserPauseState.isPaused(for: context), name: name)
+            guard browserInspectionContext != context || Date().timeIntervalSince(lastBrowserInspection) >= 1 else { return }
+            browserInspectionTask?.cancel()
+            browserInspectionContext = context
+            lastBrowserInspection = Date()
+            browserInspectionTask = Task { [weak self] in
+                let worker = Task.detached(priority: .utility) {
+                    BrowserFullscreenReader.isFullscreen(pid: pid, displayID: displayID)
+                }
+                let fullscreen = await withTaskCancellationHandler {
+                    await worker.value
+                } onCancel: {
+                    worker.cancel()
+                }
+                guard let self, !Task.isCancelled,
+                      self.lastExternalApplication?.processIdentifier == pid,
+                      self.pauseBrowserFullscreen, self.excludedApplications[identifier] == nil else { return }
+                let blocked = self.browserPauseState.observe(application: context, fullscreen: fullscreen)
+                self.applyApplicationExclusion(blocked, name: name)
+                self.browserInspectionTask = nil
+            }
+        } else {
+            browserInspectionTask?.cancel()
+            browserInspectionTask = nil
+            browserInspectionContext = nil
+            browserPauseState.reset()
+            let blocked = applicationExclusions.shouldPause(bundleIdentifier: identifier, browserIsFullscreen: false) == true
+            applyApplicationExclusion(blocked, name: name)
         }
-        let decision = applicationExclusions.shouldPause(bundleIdentifier: identifier, browserIsFullscreen: fullscreen)
-        if decision == nil && lastContextBundleIdentifier == identifier { return }
-        lastContextBundleIdentifier = identifier
-        let blocked = decision == true
+    }
+
+    private func applyApplicationExclusion(_ blocked: Bool, name: String) {
         let wasBlocked = resumeState.applicationBlocked
-        excludedApplicationName = blocked ? (excludedApplications[identifier] ?? application.localizedName ?? identifier) : nil
+        excludedApplicationName = blocked ? name : nil
         resumeState.setApplicationBlocked(blocked)
         if blocked && isActive {
             suspendForInterruption(sleeping: false)

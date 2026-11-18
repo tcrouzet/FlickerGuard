@@ -62,7 +62,7 @@ Open **… → Automatic pauses…** and use **Add applications…** to select P
 
 When a listed app is in the foreground, FlickerGuard restores the previous macOS display settings and releases the brightness keys. When you switch away, it resumes at the same software level and automatic/manual mode. Choose **Disable** during a pause to cancel that automatic return.
 
-The separate **Pause when a browser is full screen** option applies to the built-in display, including Netflix and Prime Video. It also pauses for full-screen browsing without a video. It is off by default and uses the Accessibility permission already required by FlickerGuard. Full-screen detection depends on what the browser exposes to macOS; you can add a browser to the application list to pause for all its windows.
+The separate **Pause in browser player full screen** option targets full-screen content that hides the browser’s tabs and toolbars, such as a video player. Maximizing Chrome or using its normal full-screen window with browser controls visible keeps FlickerGuard active. A change must remain stable for two seconds; uncertain readings keep the previous state. The check runs at most once a second for the current browser, in the background, and skips web page contents. It is off by default and uses FlickerGuard’s existing Accessibility permission. Detection depends on what the browser exposes to macOS; add the browser to the application list to pause for all its windows instead.
 
 ## Start with your Mac
 

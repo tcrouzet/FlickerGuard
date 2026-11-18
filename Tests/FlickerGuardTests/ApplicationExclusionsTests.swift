@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 import Testing
 @testable import FlickerGuard
 
@@ -57,9 +58,40 @@ import Testing
 
 @Test func fullscreenDetectionTargetsOnlyTheBuiltInDisplay() {
     let screen = CGRect(x: 0, y: 0, width: 1512, height: 982)
-    #expect(BrowserFullscreenReader.matchesDisplay(window: screen, display: screen, nativeFullscreen: false))
-    #expect(BrowserFullscreenReader.matchesDisplay(window: CGRect(x: 0, y: 38, width: 1512, height: 944), display: screen, nativeFullscreen: true))
-    #expect(!BrowserFullscreenReader.matchesDisplay(window: CGRect(x: 0, y: 38, width: 1512, height: 944), display: screen, nativeFullscreen: false))
-    #expect(!BrowserFullscreenReader.matchesDisplay(window: CGRect(x: 1512, y: 0, width: 1920, height: 1080), display: screen, nativeFullscreen: true))
-    #expect(!BrowserFullscreenReader.matchesDisplay(window: .zero, display: screen, nativeFullscreen: true))
+    #expect(BrowserFullscreenReader.matchesDisplay(window: screen, display: screen, nativeFullscreen: false, browserControlsVisible: false) == false)
+    #expect(BrowserFullscreenReader.matchesDisplay(window: CGRect(x: 0, y: 38, width: 1512, height: 944), display: screen, nativeFullscreen: true, browserControlsVisible: false) == true)
+    #expect(BrowserFullscreenReader.matchesDisplay(window: CGRect(x: 0, y: 38, width: 1512, height: 944), display: screen, nativeFullscreen: false, browserControlsVisible: false) == false)
+    #expect(BrowserFullscreenReader.matchesDisplay(window: CGRect(x: 1512, y: 0, width: 1920, height: 1080), display: screen, nativeFullscreen: true, browserControlsVisible: false) == false)
+    #expect(BrowserFullscreenReader.matchesDisplay(window: .zero, display: screen, nativeFullscreen: true, browserControlsVisible: false) == false)
+    #expect(BrowserFullscreenReader.matchesDisplay(window: screen, display: screen, nativeFullscreen: true, browserControlsVisible: true) == false)
+    #expect(BrowserFullscreenReader.matchesDisplay(window: screen, display: screen, nativeFullscreen: true, browserControlsVisible: nil) == nil)
+}
+
+@Test func unstableBrowserReadingsCannotAlternatePauseAndResume() {
+    let start = Date(timeIntervalSince1970: 1000)
+    var state = BrowserPauseState()
+    #expect(state.observe(application: "browser", fullscreen: true, at: start) == false)
+    #expect(state.observe(application: "browser", fullscreen: true, at: start.addingTimeInterval(1)) == false)
+    #expect(state.observe(application: "browser", fullscreen: true, at: start.addingTimeInterval(2)) == true)
+    for second in 3...20 {
+        #expect(state.observe(application: "browser", fullscreen: second.isMultiple(of: 2), at: start.addingTimeInterval(Double(second))) == true)
+    }
+    #expect(state.observe(application: "browser", fullscreen: nil, at: start.addingTimeInterval(21)) == true)
+    #expect(state.observe(application: "browser", fullscreen: false, at: start.addingTimeInterval(22)) == true)
+    #expect(state.observe(application: "browser", fullscreen: false, at: start.addingTimeInterval(23)) == true)
+    #expect(state.observe(application: "browser", fullscreen: false, at: start.addingTimeInterval(24)) == false)
+}
+
+@Test func unknownAndChangedBrowserContextsRequireFreshConfirmation() {
+    let start = Date(timeIntervalSince1970: 1000)
+    var state = BrowserPauseState()
+    #expect(state.observe(application: "browser", fullscreen: true, at: start) == false)
+    #expect(state.observe(application: "browser", fullscreen: nil, at: start.addingTimeInterval(1)) == false)
+    #expect(state.observe(application: "browser", fullscreen: true, at: start.addingTimeInterval(2)) == false)
+    #expect(state.observe(application: "browser", fullscreen: true, at: start.addingTimeInterval(3)) == false)
+    #expect(state.observe(application: "browser", fullscreen: true, at: start.addingTimeInterval(4)) == true)
+    #expect(!state.isPaused(for: "other browser"))
+    #expect(state.observe(application: "other browser", fullscreen: true, at: start.addingTimeInterval(5)) == false)
+    state.reset()
+    #expect(!state.isPaused(for: "other browser"))
 }

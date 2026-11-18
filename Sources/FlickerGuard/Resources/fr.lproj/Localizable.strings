@@ -24,14 +24,14 @@
 "ui.noExcludedApplications" = "Aucune application sélectionnée";
 "ui.addExcludedApplications" = "Ajouter des applications…";
 "ui.removeExcludedApplication" = "Retirer {app}";
-"ui.pauseBrowserFullscreen" = "Suspendre quand un navigateur est en plein écran";
-"ui.pauseBrowserFullscreenHelp" = "Concerne toute fenêtre de navigateur qui remplit l’écran intégré, y compris Netflix et Prime Video. S’applique aussi sans lecture vidéo.";
+"ui.pauseBrowserFullscreen" = "Suspendre en plein écran du lecteur web";
+"ui.pauseBrowserFullscreenHelp" = "Suspend quand le contenu en plein écran masque les onglets et les barres du navigateur. Une fenêtre avec ces éléments visibles reste atténuée. Le changement doit être stable pendant deux secondes.";
 "ui.applicationPaused" = "Suspendu pour une app";
 "status.applicationPaused" = "FlickerGuard est suspendu pour {app}. Le niveau logiciel précédent sera rétabli à ton retour.";
 "error.applicationExcluded" = "Quitte le premier plan de {app} pour activer FlickerGuard.";
 "error.excludedApplication" = "Impossible d’ajouter {app}. Choisis une application avec son propre identifiant, autre que FlickerGuard.";
 "report.applicationExclusions" = "Applications dans la liste de suspension automatique : {count}";
-"report.browserFullscreen" = "Suspension pour les navigateurs en plein écran : {value}";
+"report.browserFullscreen" = "Suspension en plein écran du lecteur web : {value}";
 "ui.quit" = "Quitter FlickerGuard";
 "ui.permissions" = "Ouvrir les réglages Accessibilité";
 "ui.keyPermission" = "Après une installation ou une mise à jour, autorise FlickerGuard dans Confidentialité et sécurité → Accessibilité, puis quitte et rouvre l’app. Déjà autorisée mais toujours bloquée ? Consulte l’aide à l’installation.";
