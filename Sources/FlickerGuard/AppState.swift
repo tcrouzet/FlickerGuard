@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import CoreGraphics
 import ServiceManagement
+import UniformTypeIdentifiers
 
 @MainActor
 final class AppState: ObservableObject {
@@ -13,6 +14,12 @@ final class AppState: ObservableObject {
     @Published private(set) var checkingForUpdates = false
     @Published private(set) var updateAvailable = false
     @Published var updateMessage: String?
+    @Published private var applicationExclusions = ApplicationExclusions(
+        applications: UserDefaults.standard.dictionary(forKey: "excludedApplications") as? [String: String] ?? [:],
+        browserFullscreen: UserDefaults.standard.bool(forKey: "pauseBrowserFullscreen")
+    )
+    @Published private(set) var excludedApplicationName: String?
+    @Published private(set) var exclusionErrorMessage: String?
     @Published private var resumeState = DisplayResumeState()
     @Published private var tableCorrectionCount = 0
 
@@ -26,11 +33,17 @@ final class AppState: ObservableObject {
     private var appliedSoftwareLevel: Double?
     private var lidWasClosed = false
     private var workspaceObservers: [NSObjectProtocol] = []
+    private var lastExternalApplication: NSRunningApplication?
+    private var lastContextBundleIdentifier: String?
+    private var lastApplicationContextRead = Date.distantPast
     @Published private var configurationObserverInstalled = false
 
     var softwareLevel: Double { settings.level }
     var automaticAdjustment: Bool { settings.automatic }
     var isResuming: Bool { resumeState.pending }
+    var isPausedForApplication: Bool { resumeState.pending && resumeState.applicationBlocked }
+    var excludedApplications: [String: String] { applicationExclusions.applications }
+    var pauseBrowserFullscreen: Bool { applicationExclusions.browserFullscreen }
     var launchAtLogin: Bool { launchAtLoginStatus == .enabled || launchAtLoginStatus == .requiresApproval }
     var isAttenuating: Bool { isActive && softwareLevel < 1 }
     var needsRestoration: Bool { transfer.needsRestoration }
@@ -50,6 +63,7 @@ final class AppState: ObservableObject {
     var activationProblem: String? {
         guard configurationObserverInstalled else { return tr("error.observerUnavailable") }
         guard !needsRestoration else { return DimmingError.restorationRequired.localizedDescription }
+        if let excludedApplicationName { return tr("error.applicationExcluded", ["app": excludedApplicationName]) }
         do {
             _ = try DimmingEligibility.validate(diagnostic)
             return nil
@@ -58,6 +72,7 @@ final class AppState: ObservableObject {
 
     var status: String {
         if needsRestoration && !isActive { return tr("status.restore") }
+        if isPausedForApplication { return tr("status.applicationPaused", ["app": excludedApplicationName ?? ""]) }
         if isResuming { return tr("status.resuming") }
         if isActive && !isAttenuating { return tr("status.noDimming") }
         return isActive ? tr("status.active") : tr("status.inactive")
@@ -71,6 +86,8 @@ final class AppState: ObservableObject {
          tr("report.softwareApplied", ["level": applied]),
          tr("report.automatic", ["value": automaticAdjustment ? tr("ui.on") : tr("ui.off")]),
          tr("report.tableCorrections", ["count": tableCorrectionCount.formatted()]),
+         tr("report.applicationExclusions", ["count": excludedApplications.count.formatted()]),
+         tr("report.browserFullscreen", ["value": pauseBrowserFullscreen ? tr("ui.on") : tr("ui.off")]),
          errorMessage.map { tr("report.error", ["error": $0]) }].compactMap { $0 } + automatic).joined(separator: "\n")
     }
 
@@ -97,6 +114,11 @@ final class AppState: ObservableObject {
         configurationObserverInstalled = result == .success
         if result != .success { errorMessage = DimmingError.configurationObserver(result.rawValue).localizedDescription }
         let center = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.didActivateApplicationNotification, NSWorkspace.activeSpaceDidChangeNotification] {
+            workspaceObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.refreshApplicationExclusion() }
+            })
+        }
         for name in [NSWorkspace.willSleepNotification, NSWorkspace.screensDidSleepNotification] {
             workspaceObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.suspendForInterruption(sleeping: true) }
@@ -115,6 +137,7 @@ final class AppState: ObservableObject {
         }
         refresh()
         refreshLaunchAtLogin()
+        refreshApplicationExclusion()
         startHardwareMonitor()
     }
 
@@ -135,6 +158,8 @@ final class AppState: ObservableObject {
 
     func activate() {
         guard configurationObserverInstalled, !resumeState.sleeping, LidStateReader.isClosed() != true, !isActive, !needsRestoration else { return }
+        refreshApplicationExclusion()
+        guard !resumeState.applicationBlocked else { return }
         let resuming = resumeState.pending
         resumeState.cancel()
         errorMessage = nil
@@ -301,6 +326,69 @@ final class AppState: ObservableObject {
 
     func refreshLaunchAtLogin() { launchAtLoginStatus = SMAppService.mainApp.status }
 
+    func chooseExcludedApplications() async {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.applicationBundle]
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.canCreateDirectories = false
+        panel.directoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
+        guard await panel.begin() == .OK else { return }
+        exclusionErrorMessage = nil
+        for url in panel.urls {
+            guard let bundle = Bundle(url: url), let identifier = bundle.bundleIdentifier,
+                  !identifier.isEmpty, identifier != "com.tcrouzet.FlickerGuard" else {
+                exclusionErrorMessage = tr("error.excludedApplication", ["app": url.lastPathComponent])
+                continue
+            }
+            let name = bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+                ?? bundle.object(forInfoDictionaryKey: "CFBundleName") as? String
+                ?? url.deletingPathExtension().lastPathComponent
+            applicationExclusions.applications[identifier] = name
+        }
+        UserDefaults.standard.set(applicationExclusions.applications, forKey: "excludedApplications")
+        refreshApplicationExclusion()
+    }
+
+    func removeExcludedApplication(_ identifier: String) {
+        applicationExclusions.applications.removeValue(forKey: identifier)
+        UserDefaults.standard.set(applicationExclusions.applications, forKey: "excludedApplications")
+        exclusionErrorMessage = nil
+        refreshApplicationExclusion()
+    }
+
+    func setPauseBrowserFullscreen(_ enabled: Bool) {
+        applicationExclusions.browserFullscreen = enabled
+        UserDefaults.standard.set(enabled, forKey: "pauseBrowserFullscreen")
+        refreshApplicationExclusion()
+    }
+
+    private func refreshApplicationExclusion() {
+        lastApplicationContextRead = Date()
+        if let frontmost = NSWorkspace.shared.frontmostApplication,
+           frontmost.bundleIdentifier != "com.tcrouzet.FlickerGuard" {
+            lastExternalApplication = frontmost
+        }
+        guard let application = lastExternalApplication, let identifier = application.bundleIdentifier else { return }
+        var fullscreen: Bool? = false
+        if pauseBrowserFullscreen, excludedApplications[identifier] == nil,
+           BrowserFullscreenReader.isBrowser(identifier), let display = diagnostic.display {
+            fullscreen = BrowserFullscreenReader.isFullscreen(pid: application.processIdentifier, displayID: display.displayID)
+        }
+        let decision = applicationExclusions.shouldPause(bundleIdentifier: identifier, browserIsFullscreen: fullscreen)
+        if decision == nil && lastContextBundleIdentifier == identifier { return }
+        lastContextBundleIdentifier = identifier
+        let blocked = decision == true
+        let wasBlocked = resumeState.applicationBlocked
+        excludedApplicationName = blocked ? (excludedApplications[identifier] ?? application.localizedName ?? identifier) : nil
+        resumeState.setApplicationBlocked(blocked)
+        if blocked && isActive {
+            suspendForInterruption(sleeping: false)
+        } else if wasBlocked && !blocked {
+            scheduleResume()
+        }
+    }
+
     func setLaunchAtLogin(_ enabled: Bool) {
         defer { refreshLaunchAtLogin() }
         do {
@@ -365,6 +453,9 @@ final class AppState: ObservableObject {
                     }
                 }
                 do {
+                    if Date().timeIntervalSince(self.lastApplicationContextRead) >= 1 {
+                        self.refreshApplicationExclusion()
+                    }
                     let brightness: HardwareBrightness
                     if self.isActive {
                         brightness = try self.checkActiveDisplay()

@@ -66,7 +66,11 @@ jobs:
 
           Supports the built-in OLED displays of the 14-inch and 16-inch MacBook Pro with PROLED XDR.
 
-          The app is not notarized by Apple. If macOS blocks the first launch, use System Settings → Privacy & Security → Open Anyway. Allow Accessibility access when activating brightness key control.
+          The app is not notarized by Apple. If macOS blocks the first launch, use System Settings → Privacy & Security → Open Anyway.
+
+          After installing or updating, open the app from Applications, click Enable, and allow FlickerGuard in System Settings → Privacy & Security → Accessibility. Then quit and reopen it. An older authorization may need to be reset even if the switch is already on: see the [installation instructions](https://github.com/tcrouzet/FlickerGuard#allow-accessibility-access).
+
+          To start with your Mac, turn on Launch at login in the app’s … menu and approve it in macOS Login Items if requested.
 
           Build provenance: gh attestation verify FlickerGuard.app.zip --repo tcrouzet/FlickerGuard
           NOTES

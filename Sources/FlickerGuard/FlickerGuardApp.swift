@@ -12,6 +12,9 @@ struct FlickerGuardApp: App {
             DiagnosticView(state: controller.state)
         }
         .menuBarExtraStyle(.window)
+        Settings {
+            ApplicationExclusionsView(state: controller.state)
+        }
     }
 }
 
@@ -55,12 +58,11 @@ private struct DiagnosticView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 10) {
-                Image(systemName: "sun.max.fill")
+                Image(nsImage: NSApplication.shared.applicationIconImage)
+                    .resizable()
+                    .scaledToFit()
                     .accessibilityHidden(true)
-                    .font(.system(size: 22))
-                    .foregroundStyle(Color.accentColor)
                     .frame(width: 40, height: 40)
-                    .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
                 VStack(alignment: .leading, spacing: 2) {
                     Text("FlickerGuard").font(.headline)
                     Text(AppInfo.version).font(.caption).foregroundStyle(.secondary)
@@ -76,6 +78,15 @@ private struct DiagnosticView: View {
                     }
                     Link(destination: AppInfo.issuesURL) {
                         Label(tr("ui.reportIssue"), systemImage: "exclamationmark.bubble")
+                    }
+                    SettingsLink {
+                        Label(tr("ui.applicationExclusions"), systemImage: "app.badge")
+                    }
+                    Divider()
+                    Toggle(tr("ui.launchAtLogin"), isOn: Binding(get: { state.launchAtLogin }, set: { state.setLaunchAtLogin($0) }))
+                        .help(tr("ui.launchAtLoginHelp"))
+                    if state.launchAtLoginStatus == .requiresApproval {
+                        Button(tr("ui.loginApproval")) { SMAppService.openSystemSettingsLoginItems() }
                     }
                     Divider()
                     Button(tr("ui.copy"), systemImage: "doc.on.doc") {
@@ -94,14 +105,19 @@ private struct DiagnosticView: View {
                 .accessibilityLabel(tr("ui.more"))
             }
             HStack(spacing: 6) {
-                Circle().fill(state.isActive ? Color.green : Color.secondary).frame(width: 6, height: 6)
-                Text(state.needsRestoration && !state.isActive ? tr("ui.restoreRequired") : state.isResuming ? tr("ui.resuming") : state.isActive ? (state.isAttenuating ? tr("ui.active") : tr("ui.noDimming")) : tr("ui.inactive"))
+                Circle().fill(state.isPausedForApplication ? Color.orange : state.isActive ? Color.green : Color.secondary).frame(width: 6, height: 6)
+                Text(state.needsRestoration && !state.isActive ? tr("ui.restoreRequired") : state.isPausedForApplication ? tr("ui.applicationPaused") : state.isResuming ? tr("ui.resuming") : state.isActive ? (state.isAttenuating ? tr("ui.active") : tr("ui.noDimming")) : tr("ui.inactive"))
                 Spacer(minLength: 8)
                 Text(state.diagnostic.isRecognizedOLED ? tr("ui.oledDetected") : tr("ui.oledUnavailable"))
                     .foregroundStyle(.secondary)
             }
             .font(.caption)
             .accessibilityElement(children: .combine)
+
+            if state.isPausedForApplication {
+                Text(state.status).font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(tr("ui.software")).font(.callout).foregroundStyle(.secondary)
@@ -112,16 +128,6 @@ private struct DiagnosticView: View {
                     .disabled(!state.isActive)
                     .accessibilityLabel(tr("ui.software"))
                     .accessibilityValue(state.softwareLevelText)
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Toggle(tr("ui.launchAtLogin"), isOn: Binding(get: { state.launchAtLogin }, set: { state.setLaunchAtLogin($0) }))
-                    .toggleStyle(.switch)
-                if state.launchAtLoginStatus == .requiresApproval {
-                    Button(tr("ui.loginApproval")) { SMAppService.openSystemSettingsLoginItems() }
-                        .buttonStyle(.link)
-                        .font(.caption)
-                }
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -170,6 +176,7 @@ private struct DiagnosticView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(tr("ui.keyPermission")).foregroundStyle(.secondary)
                     Button(tr("ui.permissions")) { openAccessibilitySettings() }.buttonStyle(.link)
+                    Link(tr("ui.installationHelp"), destination: AppInfo.documentationURL)
                 }
                 .font(.caption)
             } else if state.isActive {
@@ -196,5 +203,55 @@ private struct DiagnosticView: View {
     private func openAccessibilitySettings() {
         guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else { return }
         NSWorkspace.shared.open(url)
+    }
+}
+
+@MainActor
+private struct ApplicationExclusionsView: View {
+    @ObservedObject var state: AppState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(tr("ui.applicationExclusions")).font(.headline)
+            Text(tr("ui.applicationExclusionsHelp"))
+                .font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            List {
+                ForEach(state.excludedApplications.keys.sorted {
+                    (state.excludedApplications[$0] ?? $0).localizedStandardCompare(state.excludedApplications[$1] ?? $1) == .orderedAscending
+                }, id: \.self) { identifier in
+                    HStack {
+                        Text(state.excludedApplications[identifier] ?? identifier)
+                        Spacer()
+                        Button {
+                            state.removeExcludedApplication(identifier)
+                        } label: {
+                            Image(systemName: "minus.circle")
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(tr("ui.removeExcludedApplication", ["app": state.excludedApplications[identifier] ?? identifier]))
+                    }
+                }
+            }
+            .overlay {
+                if state.excludedApplications.isEmpty {
+                    Text(tr("ui.noExcludedApplications")).foregroundStyle(.secondary)
+                }
+            }
+            Button(tr("ui.addExcludedApplications"), systemImage: "plus") {
+                Task { await state.chooseExcludedApplications() }
+            }
+            Toggle(tr("ui.pauseBrowserFullscreen"), isOn: Binding(get: { state.pauseBrowserFullscreen }, set: { state.setPauseBrowserFullscreen($0) }))
+            Text(tr("ui.pauseBrowserFullscreenHelp"))
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let error = state.exclusionErrorMessage {
+                Text(error).font(.caption).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(20)
+        .frame(width: 480, height: 430)
+        .onAppear { NSApplication.shared.activate() }
     }
 }

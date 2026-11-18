@@ -13,9 +13,12 @@ enum LidStateReader {
 struct DisplayResumeState {
     private(set) var pending = false
     private(set) var sleeping = false
+    private(set) var applicationBlocked = false
     private var ignoreAmbientUntil: Date?
 
-    var shouldResume: Bool { pending && !sleeping }
+    var shouldResume: Bool { pending && !sleeping && !applicationBlocked }
+
+    mutating func setApplicationBlocked(_ blocked: Bool) { applicationBlocked = blocked }
 
     mutating func interrupt(wasActive: Bool, sleeping: Bool) {
         pending = pending || wasActive
@@ -30,7 +33,7 @@ struct DisplayResumeState {
     }
 
     func canReadAmbient(at date: Date = Date()) -> Bool {
-        !sleeping && (ignoreAmbientUntil.map { date >= $0 } ?? true)
+        !sleeping && !applicationBlocked && (ignoreAmbientUntil.map { date >= $0 } ?? true)
     }
 
     mutating func cancel() {
