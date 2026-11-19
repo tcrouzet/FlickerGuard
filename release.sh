@@ -29,7 +29,7 @@ swift test "${TEST_FLAGS[@]}"
 python3 scripts/check-release.py
 
 printf '%s\n' "$TAG" > "$VERSION_FILE"
-git add -- .gitignore .github Package.swift README.md screenshot.webp Sources Tests scripts release.sh LICENSE
+git add -- .gitignore .github Package.swift README.md screenshot.webp Sources Tests scripts release.sh install.sh LICENSE
 if ! git diff --cached --quiet; then
     git commit -m "Release $TAG"
 fi

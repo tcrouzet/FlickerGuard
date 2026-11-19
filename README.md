@@ -17,6 +17,8 @@ Requires **macOS 27 or later** and a **14-inch or 16-inch MacBook Pro with a PRO
 
 The app is free and is not notarized by Apple. If macOS blocks it, open **System Settings → Privacy & Security → Open Anyway** after the blocked launch. See [Apple’s instructions](https://support.apple.com/en-us/102445).
 
+From a local checkout, run `./install.sh` to install or update from the latest published GitHub release. It downloads and verifies the app, quits the running copy, runs `tccutil reset Accessibility com.tcrouzet.FlickerGuard`, replaces the app in Applications, then launches it. Allow FlickerGuard again in **System Settings → Privacy & Security → Accessibility** after installation. It leaves the existing app in place if the download fails, the app cannot quit, or the authorization reset fails. It does not build the app locally. Wait for the GitHub release workflow to finish before installing a newly published version.
+
 ## Allow Accessibility access
 
 **This permission is required after downloading and installing the app.** It lets FlickerGuard capture the brightness keys. After an update, macOS may require authorization again, even if FlickerGuard is already listed as allowed.
