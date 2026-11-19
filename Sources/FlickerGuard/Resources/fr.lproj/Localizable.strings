@@ -26,6 +26,9 @@
 "ui.removeExcludedApplication" = "Retirer {app}";
 "ui.pauseBrowserFullscreen" = "Suspendre en plein écran du lecteur web";
 "ui.pauseBrowserFullscreenHelp" = "Suspend quand le contenu en plein écran masque les onglets et les barres du navigateur. Une fenêtre avec ces éléments visibles reste atténuée. Le changement doit être stable pendant deux secondes.";
+"ui.transitioning" = "Transition en cours";
+"ui.transitionToNative" = "Retour progressif à l’affichage normal sur une minute.";
+"ui.transitionToSoftware" = "Reprise progressive de l’atténuation logicielle sur une minute.";
 "ui.applicationPaused" = "Suspendu pour une app";
 "status.applicationPaused" = "FlickerGuard est suspendu pour {app}. Le niveau logiciel précédent sera rétabli à ton retour.";
 "error.applicationExcluded" = "Quitte le premier plan de {app} pour activer FlickerGuard.";

@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 import CoreGraphics
 import Synchronization
@@ -300,4 +301,125 @@ func activationAndDeactivationRestoreHardwareAutomationAndOriginalTable(macModel
     #expect(throws: DimmingError.self) { try controller.ensureSoftwareLevel(0.2) }
     try controller.restore()
     #expect(!controller.isReconfiguring)
+}
+
+@Test func automaticPauseAndReturnFadeBothLevelsAndPreserveCalibration() throws {
+    let control = try TestDisplayControl()
+    let original = control.state.withLock { $0.table }
+    let controller = DisplayTransferController(control: control)
+    try controller.prepare(dimmingDiagnostic(), level: 0.15)
+    let start = Date(timeIntervalSince1970: 1000)
+    let outbound = DisplayTransition(from: try controller.beginTransition(softwareLevel: 0.15),
+                                     to: try controller.nativeLevels(), destination: .native, startedAt: start)
+    #expect(outbound.from == .init(hardware: 1, software: 0.15))
+    #expect(outbound.to == .init(hardware: 0.42, software: 1))
+    for tick in 1...240 {
+        let levels = outbound.levels(at: start.addingTimeInterval(Double(tick) / 4))
+        try controller.applyTransition(levels)
+        #expect(try controller.checkTransition().level == levels.hardware)
+        #expect(BrightnessCurve.matches(control.state.withLock { $0.table },
+                                       try BrightnessCurve.table(from: original, level: levels.software)))
+    }
+    try controller.restore()
+    #expect(control.state.withLock { $0.table } == original)
+    #expect(control.state.withLock { $0.brightness } == 0.42)
+    #expect(control.state.withLock { $0.automatic })
+    #expect(controller.needsRestoration == false)
+
+    control.state.withLock { $0.writes = [] }
+    try controller.prepare(dimmingDiagnostic(), level: 0.15, forTransition: true)
+    #expect(control.state.withLock { $0.table } == original)
+    #expect(control.state.withLock { $0.brightness } == 0.42)
+    #expect(control.state.withLock { $0.writes } == [.table, .automatic(false)])
+    let inbound = DisplayTransition(from: try controller.transitionLevels(),
+                                    to: .init(hardware: 1, software: 0.15), destination: .software, startedAt: start)
+    for tick in 1...240 {
+        try controller.applyTransition(inbound.levels(at: start.addingTimeInterval(Double(tick) / 4)))
+        _ = try controller.checkTransition()
+    }
+    try controller.finishSoftwareTransition()
+    #expect(try controller.checkHardwareBrightness().level == 1)
+    #expect(control.state.withLock { $0.automatic } == false)
+    #expect(controller.needsRestoration)
+    #expect(BrightnessCurve.matches(control.state.withLock { $0.table },
+                                   try BrightnessCurve.table(from: original, level: 0.15)))
+    try controller.apply(level: 0.2)
+    try controller.restore()
+    #expect(control.state.withLock { $0.table } == original)
+    #expect(control.state.withLock { $0.brightness } == 0.42)
+    #expect(control.state.withLock { $0.automatic })
+}
+
+@Test func reversingHardwareFadeUsesVerifiedLevelsAndRetainsOriginalBackup() throws {
+    let control = try TestDisplayControl()
+    let original = control.state.withLock { $0.table }
+    let controller = DisplayTransferController(control: control)
+    try controller.prepare(dimmingDiagnostic(), level: 0.2)
+    let software = try controller.beginTransition(softwareLevel: 0.2)
+    let middle = DisplayTransition.Levels(hardware: 0.7, software: 0.6)
+    try controller.applyTransition(middle)
+    control.state.withLock { $0.writes = [] }
+    #expect(try controller.beginTransition(softwareLevel: 0.2) == middle)
+    #expect(control.state.withLock { $0.writes.isEmpty })
+    try controller.applyTransition(middle)
+    #expect(control.state.withLock { $0.writes.isEmpty })
+    try controller.applyTransition(software)
+    #expect(control.state.withLock { $0.writes } == [.table, .brightness(1)])
+    try controller.finishSoftwareTransition()
+    let second = try controller.beginTransition(softwareLevel: 0.2)
+    #expect(second == software)
+    control.state.withLock { $0.writes = [] }
+    try controller.applyTransition(try controller.nativeLevels())
+    #expect(control.state.withLock { $0.writes } == [.brightness(0.42), .table])
+    try controller.restore()
+    #expect(control.state.withLock { $0.table } == original)
+    #expect(control.state.withLock { $0.brightness } == 0.42)
+}
+
+@Test func transitionRejectsExternalHardwareChangesAndInvalidLevelsWithoutWrites() throws {
+    let control = try TestDisplayControl()
+    let controller = DisplayTransferController(control: control)
+    try controller.prepare(dimmingDiagnostic(), forTransition: true)
+    control.state.withLock { $0.writes = [] }
+    for levels in [DisplayTransition.Levels(hardware: .nan, software: 0.2),
+                   .init(hardware: 1.1, software: 0.2), .init(hardware: 0.5, software: 0)] {
+        #expect(throws: (any Error).self) { try controller.applyTransition(levels) }
+    }
+    #expect(control.state.withLock { $0.writes.isEmpty })
+    control.state.withLock { $0.brightness = 0.3 }
+    #expect(throws: DimmingError.self) { try controller.checkTransition() }
+    #expect(throws: DimmingError.self) { try controller.applyTransition(.init(hardware: 0.5, software: 0.5)) }
+    #expect(control.state.withLock { $0.writes.isEmpty })
+    control.state.withLock { $0.brightness = 0.42; $0.automatic = true }
+    #expect(throws: HardwareBrightnessError.self) { try controller.checkTransition() }
+    #expect(control.state.withLock { $0.writes.isEmpty })
+    #expect(controller.needsRestoration)
+    try controller.restore()
+}
+
+@Test func failedTransitionCanRestoreOriginalSettingsAndModeChangesStopTheFade() throws {
+    for fault: TestDisplayControl.Fault in [.tableWrite, .brightnessWrite, .ignoreTable, .ignoreBrightness] {
+        let control = try TestDisplayControl()
+        let original = control.state.withLock { $0.table }
+        let controller = DisplayTransferController(control: control)
+        try controller.prepare(dimmingDiagnostic(), level: 0.2)
+        _ = try controller.beginTransition(softwareLevel: 0.2)
+        control.state.withLock { $0.fault = fault }
+        #expect(throws: (any Error).self) { try controller.applyTransition(.init(hardware: 0.7, software: 0.6)) }
+        #expect(controller.needsRestoration)
+        control.state.withLock { $0.fault = .none }
+        try controller.restore()
+        #expect(control.state.withLock { $0.table } == original)
+        #expect(control.state.withLock { $0.brightness } == 0.42)
+        #expect(control.state.withLock { $0.automatic })
+    }
+    let control = try TestDisplayControl()
+    let controller = DisplayTransferController(control: control)
+    try controller.prepare(dimmingDiagnostic(), forTransition: true)
+    #expect(throws: DimmingError.self) { try controller.finishSoftwareTransition() }
+    try #require(controller.restoreBeforeReconfiguration(displayID: 1)).get()
+    #expect(throws: DimmingError.self) { try controller.applyTransition(.init(hardware: 0.7, software: 0.6)) }
+    control.state.withLock { $0.mode = 8 }
+    try controller.restore()
+    #expect(controller.needsRestoration == false)
 }

@@ -22,6 +22,7 @@ final class AppState: ObservableObject {
     @Published private(set) var exclusionErrorMessage: String?
     @Published private var resumeState = DisplayResumeState()
     @Published private var tableCorrectionCount = 0
+    @Published private var displayTransition: DisplayTransition?
 
     nonisolated let transfer = DisplayTransferController()
     private var pendingUpdate: Task<Void, Never>?
@@ -41,10 +42,14 @@ final class AppState: ObservableObject {
     private var lastApplicationContextRead = Date.distantPast
     @Published private var configurationObserverInstalled = false
 
-    var softwareLevel: Double { settings.level }
+    var softwareLevel: Double { displayTransition == nil ? settings.level : appliedSoftwareLevel ?? settings.level }
+    var isTransitioning: Bool { displayTransition != nil }
+    var transitionLabel: String {
+        displayTransition?.destination == .native ? tr("ui.transitionToNative") : tr("ui.transitionToSoftware")
+    }
     var automaticAdjustment: Bool { settings.automatic }
     var isResuming: Bool { resumeState.pending }
-    var isPausedForApplication: Bool { resumeState.pending && resumeState.applicationBlocked }
+    var isPausedForApplication: Bool { !isActive && resumeState.pending && resumeState.applicationBlocked }
     var excludedApplications: [String: String] { applicationExclusions.applications }
     var pauseBrowserFullscreen: Bool { applicationExclusions.browserFullscreen }
     var launchAtLogin: Bool { launchAtLoginStatus == .enabled || launchAtLoginStatus == .requiresApproval }
@@ -53,7 +58,7 @@ final class AppState: ObservableObject {
     var hasKeyPermission: Bool { brightnessKeys.hasPermission }
     var softwareLevelText: String { softwareLevel.formatted(.percent.precision(.fractionLength(0))) }
     var ambientLightText: String {
-        guard isActive, automaticAdjustment else { return tr("ui.ambientInactive") }
+        guard isActive, automaticAdjustment, !isTransitioning else { return tr("ui.ambientInactive") }
         guard let lux = ambientDiagnostic.measuredLux else { return tr("report.ambientWaiting") }
         return tr("report.ambientLux", ["value": lux.formatted(.number.precision(.fractionLength(1)))])
     }
@@ -75,6 +80,7 @@ final class AppState: ObservableObject {
 
     var status: String {
         if needsRestoration && !isActive { return tr("status.restore") }
+        if isTransitioning { return transitionLabel }
         if isPausedForApplication { return tr("status.applicationPaused", ["app": excludedApplicationName ?? ""]) }
         if isResuming { return tr("status.resuming") }
         if isActive && !isAttenuating { return tr("status.noDimming") }
@@ -161,7 +167,7 @@ final class AppState: ObservableObject {
         workspaceObservers.removeAll()
     }
 
-    func activate() {
+    func activate(gradually: Bool = false) {
         guard configurationObserverInstalled, !resumeState.sleeping, LidStateReader.isClosed() != true, !isActive, !needsRestoration else { return }
         refreshApplicationExclusion()
         guard !resumeState.applicationBlocked else { return }
@@ -172,7 +178,7 @@ final class AppState: ObservableObject {
         do {
             _ = try DimmingEligibility.validate(diagnostic)
             guard let hardware = try diagnostic.hardwareBrightness?.get() else { throw HardwareBrightnessError.unavailableAPI }
-            let lux = automaticAdjustment && !resuming ? try AmbientLightReader.read() : nil
+            let lux = automaticAdjustment && !resuming && !gradually ? try AmbientLightReader.read() : nil
             let level = try settings.activationLevel(hardware: hardware, ambientLux: lux, resuming: resuming)
             let curve = automaticAdjustment ? AmbientBrightness() : nil
             var readings = AmbientBrightnessDiagnostic()
@@ -189,14 +195,17 @@ final class AppState: ObservableObject {
                     self.stopAfterError(error)
                 }
             })
-            try transfer.prepare(diagnostic, level: level)
+            try transfer.prepare(diagnostic, level: level, forTransition: gradually)
             try settings.remember(level)
             if automaticAdjustment { readings.didAdjust() }
-            ambientCurve = curve
+            ambientCurve = gradually ? nil : curve
             ambientDiagnostic = readings
-            appliedSoftwareLevel = level
+            appliedSoftwareLevel = gradually ? 1 : level
             isActive = true
-            if resuming { resumeState.didResume() }
+            if gradually {
+                displayTransition = DisplayTransition(from: try transfer.transitionLevels(),
+                                                      to: .init(hardware: 1, software: level), destination: .software)
+            } else if resuming { resumeState.didResume() }
             tableCorrectionCount = 0
             diagnostic = .capture()
         } catch { stopAfterError(error) }
@@ -235,7 +244,15 @@ final class AppState: ObservableObject {
     private func applySoftwareLevel(_ level: Double) -> Bool {
         do {
             guard brightnessKeys.isRunning else { throw BrightnessKeyError.disabled }
-            try transfer.apply(level: level)
+            if let transition = displayTransition {
+                let current = try transfer.transitionLevels()
+                let changed = DisplayTransition.Levels(hardware: current.hardware, software: level)
+                try transfer.applyTransition(changed)
+                let target = transition.destination == .native ? try transfer.nativeLevels() : .init(hardware: 1, software: level)
+                displayTransition = DisplayTransition(from: changed, to: target, destination: transition.destination)
+            } else {
+                try transfer.apply(level: level)
+            }
             appliedSoftwareLevel = level
             return true
         } catch {
@@ -246,7 +263,7 @@ final class AppState: ObservableObject {
 
     func setAutomaticAdjustment(_ enabled: Bool) {
         do {
-            let lux = enabled && isActive && resumeState.canReadAmbient() && LidStateReader.isClosed() != true ? try AmbientLightReader.read() : nil
+            let lux = enabled && isActive && !isTransitioning && resumeState.canReadAmbient() && LidStateReader.isClosed() != true ? try AmbientLightReader.read() : nil
             let curve = enabled && isActive ? AmbientBrightness() : nil
             var readings = AmbientBrightnessDiagnostic()
             let next: Double?
@@ -268,7 +285,7 @@ final class AppState: ObservableObject {
     }
 
     private func followAmbientLight() throws {
-        guard automaticAdjustment, let ambientCurve, resumeState.canReadAmbient(), LidStateReader.isClosed() != true else { return }
+        guard !isTransitioning, automaticAdjustment, let ambientCurve, resumeState.canReadAmbient(), LidStateReader.isClosed() != true else { return }
         let level = try ambientDiagnostic.observe(lux: AmbientLightReader.read(), curve: ambientCurve, current: softwareLevel)
         guard level != softwareLevel else { return }
         pendingUpdate?.cancel()
@@ -281,6 +298,7 @@ final class AppState: ObservableObject {
         resumeTask?.cancel()
         resumeTask = nil
         resumeState.cancel()
+        displayTransition = nil
         cancelUpdates()
         isActive = false
         ambientCurve = nil
@@ -309,13 +327,13 @@ final class AppState: ObservableObject {
         if !sleeping { scheduleResume() }
     }
 
-    private func scheduleResume() {
-        guard resumeState.shouldResume else { return }
+    private func scheduleResume(gradually: Bool = false) {
+        guard !isActive, resumeState.shouldResume else { return }
         resumeTask?.cancel()
         resumeTask = Task { [weak self] in
             for _ in 0..<20 {
                 do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
-                guard let self, !Task.isCancelled, self.resumeState.shouldResume else { return }
+                guard let self, !Task.isCancelled, !self.isActive, self.resumeState.shouldResume else { return }
                 do {
                     if self.needsRestoration {
                         try self.transfer.restore()
@@ -323,7 +341,7 @@ final class AppState: ObservableObject {
                     }
                     self.diagnostic = .capture()
                     guard (try? DimmingEligibility.validate(self.diagnostic)) != nil else { continue }
-                    self.activate()
+                    self.activate(gradually: gradually)
                     return
                 } catch { self.errorMessage = error.localizedDescription }
             }
@@ -422,11 +440,47 @@ final class AppState: ObservableObject {
         let wasBlocked = resumeState.applicationBlocked
         excludedApplicationName = blocked ? name : nil
         resumeState.setApplicationBlocked(blocked)
-        if blocked && isActive {
-            suspendForInterruption(sleeping: false)
+        if blocked && isActive && displayTransition?.destination != .native {
+            startApplicationTransition(to: .native)
         } else if wasBlocked && !blocked {
-            scheduleResume()
+            if isActive && isTransitioning { startApplicationTransition(to: .software) }
+            else { scheduleResume(gradually: true) }
         }
+    }
+
+    private func startApplicationTransition(to destination: DisplayTransition.Destination) {
+        do {
+            let current = try transfer.beginTransition(softwareLevel: appliedSoftwareLevel ?? settings.level)
+            let target = destination == .native ? try transfer.nativeLevels() : .init(hardware: 1, software: settings.level)
+            cancelUpdates()
+            resumeTask?.cancel()
+            resumeTask = nil
+            ambientCurve = nil
+            resumeState.interrupt(wasActive: true, sleeping: false)
+            displayTransition = DisplayTransition(from: current, to: target, destination: destination)
+        } catch { stopAfterError(error) }
+    }
+
+    private func advanceDisplayTransition() throws {
+        guard let transition = displayTransition else { return }
+        let now = Date()
+        let levels = transition.levels(at: now)
+        try transfer.applyTransition(levels)
+        appliedSoftwareLevel = levels.software
+        guard transition.isComplete(at: now) else { return }
+        if transition.destination == .native {
+            try transfer.restore()
+            brightnessKeys.stop()
+            isActive = false
+        } else {
+            try transfer.finishSoftwareTransition()
+            resumeState.didResume()
+            ambientCurve = automaticAdjustment ? AmbientBrightness() : nil
+            ambientDiagnostic = AmbientBrightnessDiagnostic()
+            try ambientDiagnostic.retainLevel(settings.level)
+        }
+        displayTransition = nil
+        diagnostic = .capture()
     }
 
     func setLaunchAtLogin(_ enabled: Bool) {
@@ -442,6 +496,7 @@ final class AppState: ObservableObject {
 
     private func checkActiveDisplay() throws -> HardwareBrightness {
         guard brightnessKeys.isRunning else { throw BrightnessKeyError.disabled }
+        if isTransitioning { return try transfer.checkTransition() }
         let brightness = try transfer.checkHardwareBrightness()
         if let appliedSoftwareLevel, try transfer.ensureSoftwareLevel(appliedSoftwareLevel) {
             tableCorrectionCount += 1
@@ -496,6 +551,7 @@ final class AppState: ObservableObject {
                     if Date().timeIntervalSince(self.lastApplicationContextRead) >= 1 {
                         self.refreshApplicationExclusion()
                     }
+                    try self.advanceDisplayTransition()
                     let brightness: HardwareBrightness
                     if self.isActive {
                         brightness = try self.checkActiveDisplay()

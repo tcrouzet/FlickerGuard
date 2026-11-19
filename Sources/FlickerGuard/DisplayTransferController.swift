@@ -78,6 +78,7 @@ private struct OriginalTransferStore: Sendable {
     let brightness: Float
     let automaticBrightness: Bool
     var tableRestored = false
+    var transition: DisplayTransition.Levels?
 }
 
 protocol DisplayControl: Sendable {
@@ -131,7 +132,7 @@ final class DisplayTransferController: Sendable {
     var needsRestoration: Bool { original.withLock { $0 != nil } }
     var isReconfiguring: Bool { original.withLock { $0?.tableRestored == true } }
 
-    func prepare(_ diagnostic: DisplayDiagnostic, level: Double = 1) throws {
+    func prepare(_ diagnostic: DisplayDiagnostic, level: Double = 1, forTransition: Bool = false) throws {
         let display = try DimmingEligibility.validate(diagnostic)
         try original.withLock { saved in
             guard saved == nil else { throw DimmingError.restorationRequired }
@@ -140,18 +141,21 @@ final class DisplayTransferController: Sendable {
             let automatic = try control.automaticBrightness(display.displayID)
             let table = try control.readTable(display.displayID)
             let requested = try BrightnessCurve.table(from: table, level: level)
-            let snapshot = OriginalTransferStore(display: display, modeID: modeID, table: table,
+            var snapshot = OriginalTransferStore(display: display, modeID: modeID, table: table,
                                                  brightness: brightness.level, automaticBrightness: automatic)
+            if forTransition { snapshot.transition = .init(hardware: brightness.level, software: 1) }
             try validateCurrentDisplay(snapshot)
             saved = snapshot
             // Verify that the saved table can be restored before applying attenuation.
             try write(table, to: snapshot)
             try setAutomaticBrightness(false, on: snapshot)
-            // Apply attenuation first to avoid a bright flash when raising the hardware level.
-            try write(requested, to: snapshot)
-            try setBrightness(1, on: snapshot)
-            guard BrightnessCurve.matches(try control.readTable(display.displayID), requested) else {
-                throw DimmingError.verificationFailed
+            if !forTransition {
+                // Apply attenuation first to avoid a bright flash when raising the hardware level.
+                try write(requested, to: snapshot)
+                try setBrightness(1, on: snapshot)
+                guard BrightnessCurve.matches(try control.readTable(display.displayID), requested) else {
+                    throw DimmingError.verificationFailed
+                }
             }
         }
     }
@@ -160,6 +164,7 @@ final class DisplayTransferController: Sendable {
         try original.withLock { saved in
             guard let saved else { throw DimmingError.inactive }
             guard !saved.tableRestored else { throw DimmingError.restorationRequired }
+            guard saved.transition == nil else { throw DimmingError.restorationRequired }
             try requireMaximumBrightness(saved.display.displayID)
             try write(BrightnessCurve.table(from: saved.table, level: level), to: saved)
         }
@@ -170,12 +175,102 @@ final class DisplayTransferController: Sendable {
         try original.withLock { saved in
             guard let saved else { throw DimmingError.inactive }
             guard !saved.tableRestored else { throw DimmingError.restorationRequired }
+            guard saved.transition == nil else { throw DimmingError.restorationRequired }
             let expected = try BrightnessCurve.table(from: saved.table, level: level)
             try validateCurrentDisplay(saved)
             try requireMaximumBrightness(saved.display.displayID)
             guard !BrightnessCurve.matches(try control.readTable(saved.display.displayID), expected) else { return false }
             try write(expected, to: saved)
             return true
+        }
+    }
+
+    func beginTransition(softwareLevel: Double) throws -> DisplayTransition.Levels {
+        try original.withLock { saved in
+            guard var snapshot = saved else { throw DimmingError.inactive }
+            guard !snapshot.tableRestored else { throw DimmingError.restorationRequired }
+            if let levels = snapshot.transition {
+                try validateCurrentDisplay(snapshot)
+                _ = try requireBrightness(levels.hardware, snapshot.display.displayID)
+                return levels
+            }
+            try validateCurrentDisplay(snapshot)
+            _ = try requireMaximumBrightness(snapshot.display.displayID)
+            let expected = try BrightnessCurve.table(from: snapshot.table, level: softwareLevel)
+            if !BrightnessCurve.matches(try control.readTable(snapshot.display.displayID), expected) {
+                try write(expected, to: snapshot)
+            }
+            let levels = DisplayTransition.Levels(hardware: 1, software: softwareLevel)
+            snapshot.transition = levels
+            saved = snapshot
+            return levels
+        }
+    }
+
+    func transitionLevels() throws -> DisplayTransition.Levels {
+        try original.withLock { saved in
+            guard let saved, let levels = saved.transition else { throw DimmingError.inactive }
+            guard !saved.tableRestored else { throw DimmingError.restorationRequired }
+            try validateCurrentDisplay(saved)
+            _ = try requireBrightness(levels.hardware, saved.display.displayID)
+            return levels
+        }
+    }
+
+    func nativeLevels() throws -> DisplayTransition.Levels {
+        try original.withLock { saved in
+            guard let saved else { throw DimmingError.inactive }
+            return DisplayTransition.Levels(hardware: saved.brightness, software: 1)
+        }
+    }
+
+    func applyTransition(_ levels: DisplayTransition.Levels) throws {
+        try original.withLock { saved in
+            guard var snapshot = saved, let previous = snapshot.transition else { throw DimmingError.inactive }
+            guard !snapshot.tableRestored else { throw DimmingError.restorationRequired }
+            _ = try HardwareBrightness(level: levels.hardware)
+            let table = try BrightnessCurve.table(from: snapshot.table, level: levels.software)
+            try validateCurrentDisplay(snapshot)
+            _ = try requireBrightness(previous.hardware, snapshot.display.displayID)
+            // Lower the hardware first; raise it only after applying the software level.
+            if levels.hardware < previous.hardware { try setBrightness(levels.hardware, on: snapshot) }
+            if !BrightnessCurve.matches(try control.readTable(snapshot.display.displayID), table) {
+                try write(table, to: snapshot)
+            }
+            if levels.hardware > previous.hardware { try setBrightness(levels.hardware, on: snapshot) }
+            snapshot.transition = levels
+            saved = snapshot
+        }
+    }
+
+    @discardableResult
+    func checkTransition() throws -> HardwareBrightness {
+        try original.withLock { saved in
+            guard let saved, let levels = saved.transition else { throw DimmingError.inactive }
+            guard !saved.tableRestored else { throw DimmingError.restorationRequired }
+            try validateCurrentDisplay(saved)
+            let brightness = try requireBrightness(levels.hardware, saved.display.displayID)
+            let expected = try BrightnessCurve.table(from: saved.table, level: levels.software)
+            if !BrightnessCurve.matches(try control.readTable(saved.display.displayID), expected) {
+                try write(expected, to: saved)
+            }
+            return brightness
+        }
+    }
+
+    func finishSoftwareTransition() throws {
+        try original.withLock { saved in
+            guard var snapshot = saved, let levels = snapshot.transition else { throw DimmingError.inactive }
+            guard !snapshot.tableRestored else { throw DimmingError.restorationRequired }
+            guard levels.hardware == 1 else { throw DimmingError.hardwareNotMaximum }
+            try validateCurrentDisplay(snapshot)
+            _ = try requireMaximumBrightness(snapshot.display.displayID)
+            guard BrightnessCurve.matches(try control.readTable(snapshot.display.displayID),
+                                         try BrightnessCurve.table(from: snapshot.table, level: levels.software)) else {
+                throw DimmingError.verificationFailed
+            }
+            snapshot.transition = nil
+            saved = snapshot
         }
     }
 
@@ -208,8 +303,13 @@ final class DisplayTransferController: Sendable {
 
     @discardableResult
     private func requireMaximumBrightness(_ displayID: CGDirectDisplayID) throws -> HardwareBrightness {
+        try requireBrightness(1, displayID)
+    }
+
+    @discardableResult
+    private func requireBrightness(_ expected: Float, _ displayID: CGDirectDisplayID) throws -> HardwareBrightness {
         let brightness = try control.brightness(displayID)
-        guard brightness.level == 1 else {
+        guard expected == 1 ? brightness.level == 1 : abs(brightness.level - expected) <= 0.001 else {
             throw DimmingError.hardwareNotMaximum
         }
         guard try !control.automaticBrightness(displayID) else { throw HardwareBrightnessError.automaticVerification }

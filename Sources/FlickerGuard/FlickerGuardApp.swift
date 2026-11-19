@@ -8,13 +8,25 @@ struct FlickerGuardApp: App {
     @NSApplicationDelegateAdaptor(MenuBarController.self) private var controller
 
     var body: some Scene {
-        MenuBarExtra("FlickerGuard", systemImage: "sun.max") {
+        MenuBarExtra {
             DiagnosticView(state: controller.state)
+        } label: {
+            MenuBarIcon(state: controller.state)
         }
         .menuBarExtraStyle(.window)
         Settings {
             ApplicationExclusionsView(state: controller.state)
         }
+    }
+}
+
+@MainActor
+private struct MenuBarIcon: View {
+    @ObservedObject var state: AppState
+
+    var body: some View {
+        Image(systemName: state.isActive ? "sun.max.fill" : "sun.max")
+            .accessibilityLabel("FlickerGuard")
     }
 }
 
@@ -106,7 +118,7 @@ private struct DiagnosticView: View {
             }
             HStack(spacing: 6) {
                 Circle().fill(state.isPausedForApplication ? Color.orange : state.isActive ? Color.green : Color.secondary).frame(width: 6, height: 6)
-                Text(state.needsRestoration && !state.isActive ? tr("ui.restoreRequired") : state.isPausedForApplication ? tr("ui.applicationPaused") : state.isResuming ? tr("ui.resuming") : state.isActive ? (state.isAttenuating ? tr("ui.active") : tr("ui.noDimming")) : tr("ui.inactive"))
+                Text(state.needsRestoration && !state.isActive ? tr("ui.restoreRequired") : state.isTransitioning ? tr("ui.transitioning") : state.isPausedForApplication ? tr("ui.applicationPaused") : state.isResuming ? tr("ui.resuming") : state.isActive ? (state.isAttenuating ? tr("ui.active") : tr("ui.noDimming")) : tr("ui.inactive"))
                 Spacer(minLength: 8)
                 Text(state.diagnostic.isRecognizedOLED ? tr("ui.oledDetected") : tr("ui.oledUnavailable"))
                     .foregroundStyle(.secondary)
@@ -114,7 +126,7 @@ private struct DiagnosticView: View {
             .font(.caption)
             .accessibilityElement(children: .combine)
 
-            if state.isPausedForApplication {
+            if state.isPausedForApplication || state.isTransitioning {
                 Text(state.status).font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }

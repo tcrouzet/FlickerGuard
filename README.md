@@ -45,11 +45,11 @@ The command clears only FlickerGuard’s Accessibility authorization. You must g
 
 ## Use
 
-Click the sun icon, then **Enable** after completing the installation and Accessibility steps above.
+Click the sun icon, then **Enable** after completing the installation and Accessibility steps above. The sun’s center is filled while FlickerGuard controls the display and hollow when it is inactive or fully paused.
 
 - **Software brightness:** drag the slider or use the brightness keys. Lower values make the screen darker; 100% removes software dimming.
 - **Automatic adjustment:** follows ambient light and ignores small variations. Moving the slider or pressing a brightness key turns it off, keeping your chosen level fixed. Measured ambient light is shown in lux below the switch.
-- **Hardware brightness:** shows the screen’s hardware level, held at 100% while FlickerGuard is active.
+- **Hardware brightness:** shows the screen’s hardware level, held at 100% while FlickerGuard is active, except during automatic pause transitions.
 - **Disable:** restores your previous macOS brightness and automatic brightness setting.
 
 FlickerGuard resumes at the same software level after sleep or closing the lid. It ignores temporary ambient light changes caused by opening and closing the Mac.
@@ -60,7 +60,7 @@ FlickerGuard resumes at the same software level after sleep or closing the lid. 
 
 Open **… → Automatic pauses…** and use **Add applications…** to select Photoshop, Pixelmator, Final Cut Pro, VLC, QuickTime Player, or any other apps. Remove an entry with its minus button. Your list is saved between launches; it starts empty.
 
-When a listed app is in the foreground, FlickerGuard restores the previous macOS display settings and releases the brightness keys. When you switch away, it resumes at the same software level and automatic/manual mode. Choose **Disable** during a pause to cancel that automatic return.
+When a listed app is in the foreground, FlickerGuard gradually restores your previous hardware brightness and removes software dimming over one minute, then releases the brightness keys. Wait for the transition to finish before judging colors. When you switch away, it fades back over one minute to the same software level and automatic/manual mode. Switching apps during a transition reverses it from the current levels. Browser player pauses use the same transitions. Choose **Disable** during a pause or transition to cancel the automatic return. Disable, quit and safety interruptions restore the display immediately.
 
 The separate **Pause in browser player full screen** option targets full-screen content that hides the browser’s tabs and toolbars, such as a video player. Maximizing Chrome or using its normal full-screen window with browser controls visible keeps FlickerGuard active. A change must remain stable for two seconds; uncertain readings keep the previous state. The check runs at most once a second for the current browser, in the background, and skips web page contents. It is off by default and uses FlickerGuard’s existing Accessibility permission. Detection depends on what the browser exposes to macOS; add the browser to the application list to pause for all its windows instead.
 

@@ -26,6 +26,9 @@
 "ui.removeExcludedApplication" = "Remove {app}";
 "ui.pauseBrowserFullscreen" = "Pause in browser player full screen";
 "ui.pauseBrowserFullscreenHelp" = "Pauses when full-screen content hides the browser’s tabs and toolbars. A browser window with its controls visible stays dimmed. Changes must remain stable for two seconds.";
+"ui.transitioning" = "Transition in progress";
+"ui.transitionToNative" = "Gradually restoring normal display settings over one minute.";
+"ui.transitionToSoftware" = "Gradually resuming software dimming over one minute.";
 "ui.applicationPaused" = "Paused for an app";
 "status.applicationPaused" = "FlickerGuard is paused for {app}. Your previous software level will resume when you leave.";
 "error.applicationExcluded" = "Leave {app} to enable FlickerGuard.";
