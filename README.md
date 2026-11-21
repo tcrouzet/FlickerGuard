@@ -1,5 +1,9 @@
 # FlickerGuard
 
+> **Project abandoned**
+>
+> I am abandoning FlickerGuard because the app does not solve the flickering problem on my OLED MacBook Pro. Keeping hardware brightness at 100% and dimming in software did not resolve my eye discomfort. I am returning the Mac and will wait for Apple to address the problem.
+
 FlickerGuard is for people who experience discomfort from PWM flickering on the new OLED MacBook Pro displays. PWM (pulse-width modulation) controls brightness by rapidly pulsing the display’s light output, which can bother people sensitive to flicker.
 
 FlickerGuard keeps hardware brightness at 100% and dims the screen in software to avoid hardware dimming that may introduce PWM flicker. Control brightness from the menu bar with a slider, the keyboard brightness keys, or automatic adjustment to ambient light.
