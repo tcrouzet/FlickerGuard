@@ -2,7 +2,7 @@ import Foundation
 import Testing
 import CoreGraphics
 import Synchronization
-@testable import FlickerGuard
+@testable import PWMFixer
 
 private func dimmingDiagnostic(
     level: Float? = 1, hasOriginal: Bool = true, uuid: String? = "test-panel",

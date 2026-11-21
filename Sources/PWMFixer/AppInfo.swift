@@ -2,9 +2,9 @@ import Foundation
 
 enum AppInfo {
     static let resources = Bundle.module
-    static let documentationURL = URL(string: "https://github.com/tcrouzet/FlickerGuard#readme")!
-    static let issuesURL = URL(string: "https://github.com/tcrouzet/FlickerGuard/issues/new")!
-    static let downloadURL = URL(string: "https://github.com/tcrouzet/FlickerGuard/releases/latest/download/FlickerGuard.app.zip")!
+    static let documentationURL = URL(string: "https://github.com/yilmazonline/PWMFixer#readme")!
+    static let issuesURL = URL(string: "https://github.com/yilmazonline/PWMFixer/issues/new")!
+    static let downloadURL = URL(string: "https://github.com/yilmazonline/PWMFixer/releases/latest/download/PWMFixer.app.zip")!
     static let version: String = {
         guard let url = resources.url(forResource: "Version", withExtension: "txt"),
               let value = try? String(contentsOf: url, encoding: .utf8) else { return "development" }

@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 import Testing
-@testable import FlickerGuard
+@testable import PWMFixer
 
 @Test func applicationExclusionsAreOptInAndMatchExactIdentifiers() {
     var settings = ApplicationExclusions()

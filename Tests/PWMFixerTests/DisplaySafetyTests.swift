@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import FlickerGuard
+@testable import PWMFixer
 
 private func display(
     builtin: Bool = true, vendor: UInt32 = 1234, product: UInt32 = 5678,

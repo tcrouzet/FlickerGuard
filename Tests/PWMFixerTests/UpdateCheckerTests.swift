@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import FlickerGuard
+@testable import PWMFixer
 
 @Test func updatesCompareNumericVersionComponents() throws {
     for (latest, current) in [("0.3.9", "0.3.8"), ("0.3.10", "0.3.9"), ("0.10.0", "0.9.99"), ("1.0.0", "0.99.99")] {

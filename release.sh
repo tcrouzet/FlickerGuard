@@ -5,12 +5,12 @@ cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 export GIT_TERMINAL_PROMPT=0
 
 REPO=$(gh repo view --json nameWithOwner --jq '.nameWithOwner')
-[[ "$REPO" == "tcrouzet/FlickerGuard" ]] || { printf 'Expected repository: tcrouzet/FlickerGuard\n' >&2; exit 1; }
+[[ "$REPO" == "yilmazonline/PWMFixer" ]] || { printf 'Expected repository: yilmazonline/PWMFixer\n' >&2; exit 1; }
 [[ "$(git branch --show-current)" == "main" ]] || { printf 'Run release.sh from main.\n' >&2; exit 1; }
 git fetch origin --tags
 
-VERSION_FILE=Sources/FlickerGuard/Resources/Version.txt
-CURRENT=$(python3 -c 'import pathlib, re; v = pathlib.Path("Sources/FlickerGuard/Resources/Version.txt").read_text().strip(); assert re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", v), "Expected version: major.minor.patch"; print(v)')
+VERSION_FILE=Sources/PWMFixer/Resources/Version.txt
+CURRENT=$(python3 -c 'import pathlib, re; v = pathlib.Path("Sources/PWMFixer/Resources/Version.txt").read_text().strip(); assert re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", v), "Expected version: major.minor.patch"; print(v)')
 TAG="$CURRENT"
 if git show-ref --verify --quiet "refs/tags/$CURRENT"; then
     PATCH_VERSION=${CURRENT##*.}
@@ -39,4 +39,4 @@ git tag "$TAG"
 git push origin "$TAG"
 
 printf 'Release %s handed to GitHub Actions: https://github.com/%s/actions\n' "$TAG" "$REPO"
-printf 'Download after the workflow succeeds: https://github.com/%s/releases/download/%s/FlickerGuard.app.zip\n' "$REPO" "$TAG"
+printf 'Download after the workflow succeeds: https://github.com/%s/releases/download/%s/PWMFixer.app.zip\n' "$REPO" "$TAG"

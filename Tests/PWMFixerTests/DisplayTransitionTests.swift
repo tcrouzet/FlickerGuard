@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import FlickerGuard
+@testable import PWMFixer
 
 @Test func displayFadeTakesOneMinuteAndClampsItsEndpoints() {
     let start = Date(timeIntervalSince1970: 1000)

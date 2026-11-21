@@ -90,7 +90,7 @@ final class AppState: ObservableObject {
     var report: String {
         let applied = appliedSoftwareLevel.map { $0.formatted(.percent.precision(.fractionLength(2))) } ?? tr("common.unavailable")
         let automatic = automaticAdjustment ? (isActive ? ambientDiagnostic.report() : [tr("report.ambientInactive")]) : []
-        return ([diagnostic.report, "FlickerGuard \(AppInfo.version)", tr("report.status", ["status": status]),
+        return ([diagnostic.report, "PWMFixer \(AppInfo.version)", tr("report.status", ["status": status]),
          tr("report.software", ["level": softwareLevelText]),
          tr("report.softwareApplied", ["level": applied]),
          tr("report.automatic", ["value": automaticAdjustment ? tr("ui.on") : tr("ui.off")]),
@@ -364,7 +364,7 @@ final class AppState: ObservableObject {
         exclusionErrorMessage = nil
         for url in panel.urls {
             guard let bundle = Bundle(url: url), let identifier = bundle.bundleIdentifier,
-                  !identifier.isEmpty, identifier != "com.tcrouzet.FlickerGuard" else {
+                  !identifier.isEmpty, identifier != "com.yilmazonline.PWMFixer" else {
                 exclusionErrorMessage = tr("error.excludedApplication", ["app": url.lastPathComponent])
                 continue
             }
@@ -395,7 +395,7 @@ final class AppState: ObservableObject {
         guard !resumeState.sleeping, LidStateReader.isClosed() != true else { return }
         if let frontmost = NSWorkspace.shared.frontmostApplication,
            frontmost.activationPolicy == .regular,
-           frontmost.bundleIdentifier != "com.tcrouzet.FlickerGuard" {
+           frontmost.bundleIdentifier != "com.yilmazonline.PWMFixer" {
             lastExternalApplication = frontmost
         }
         guard let application = lastExternalApplication, let identifier = application.bundleIdentifier else { return }

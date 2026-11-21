@@ -22,7 +22,7 @@ if name == "python3":
     os.execv(sys.executable, [sys.executable, *args])
 if name == "gh":
     if args[:2] == ["repo", "view"]:
-        print(os.environ.get("RELEASE_CHECK_REPO", "tcrouzet/FlickerGuard"))
+        print(os.environ.get("RELEASE_CHECK_REPO", "yilmazonline/PWMFixer"))
     elif args[:2] == ["release", "create"]:
         assert pathlib.Path(args[3]).is_file(), "App archive missing"
         sys.exit(int(os.environ.get("RELEASE_CHECK_PUBLISH_EXIT", "0")))
@@ -59,10 +59,10 @@ cases = [
     ({"RELEASE_CHECK_VERSION": "invalid"}, False, "invalid"),
 ]
 for settings, success, version in cases:
-    with tempfile.TemporaryDirectory(prefix="FlickerGuard release check ") as folder:
+    with tempfile.TemporaryDirectory(prefix="PWMFixer release check ") as folder:
         root = Path(folder)
         shutil.copy2(source, root / "release.sh")
-        version_file = root / "Sources/FlickerGuard/Resources/Version.txt"
+        version_file = root / "Sources/PWMFixer/Resources/Version.txt"
         version_file.parent.mkdir(parents=True)
         version_file.write_text(settings.get("RELEASE_CHECK_VERSION", "0.3.4") + "\n")
         commands = root / "bin"
@@ -82,7 +82,7 @@ for settings, success, version in cases:
             assert writes == [["git", "commit", "-m", f"Release {version}"], ["git", "push", "-u", "origin", "main"], ["git", "tag", version], ["git", "push", "origin", version]], writes
             assert "handed to GitHub Actions" in result.stdout
             assert "Download after the workflow succeeds" in result.stdout
-            assert f"/releases/download/{version}/FlickerGuard.app.zip" in result.stdout
+            assert f"/releases/download/{version}/PWMFixer.app.zip" in result.stdout
         else:
             assert "handed to GitHub Actions" not in result.stdout
             if "RELEASE_CHECK_PUSH_EXIT" in settings:
@@ -96,11 +96,11 @@ for settings, success, version in cases:
 
 publish_cases = [({}, True), ({"RELEASE_CHECK_PUBLISH_EXIT": "1"}, False), ({"RELEASE_CHECK_MISSING_APP": "1"}, False)]
 for settings, success in publish_cases:
-    with tempfile.TemporaryDirectory(prefix="FlickerGuard publish check ") as folder:
+    with tempfile.TemporaryDirectory(prefix="PWMFixer publish check ") as folder:
         root = Path(folder)
         (root / ".build").mkdir()
         if "RELEASE_CHECK_MISSING_APP" not in settings:
-            (root / ".build/FlickerGuard.app.zip").write_bytes(b"test archive")
+            (root / ".build/PWMFixer.app.zip").write_bytes(b"test archive")
         commands = root / "bin"
         commands.mkdir()
         executable = commands / "gh"
@@ -111,7 +111,7 @@ for settings, success in publish_cases:
         result = subprocess.run(["bash", "-c", publish_script], cwd=root, env=environment, capture_output=True, text=True)
         assert (result.returncode == 0) == success, (settings, result.stdout, result.stderr)
         calls = [json.loads(line) for line in log.read_text().splitlines()]
-        assert calls == [["gh", "release", "create", "0.3.4", ".build/FlickerGuard.app.zip", "--verify-tag", "--latest", "--title", "FlickerGuard 0.3.4", "--notes-file", ".build/release-notes.md"]], calls
+        assert calls == [["gh", "release", "create", "0.3.4", ".build/PWMFixer.app.zip", "--verify-tag", "--latest", "--title", "PWMFixer 0.3.4", "--notes-file", ".build/release-notes.md"]], calls
         notes = (root / ".build/release-notes.md").read_text()
-        assert notes.startswith("[Download FlickerGuard.app.zip](https://github.com/tcrouzet/FlickerGuard/releases/download/0.3.4/FlickerGuard.app.zip)")
+        assert notes.startswith("[Download PWMFixer.app.zip](https://github.com/yilmazonline/PWMFixer/releases/download/0.3.4/PWMFixer.app.zip)")
 print(f"Release checks: {len(cases) + len(publish_cases)} scenarios passed (no network or repository writes).")

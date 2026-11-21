@@ -7,12 +7,12 @@ enum UpdateChecker {
 
     static func latestVersion() async throws -> String {
         var request = URLRequest(
-            url: URL(string: "https://api.github.com/repos/tcrouzet/FlickerGuard/releases/latest")!,
+            url: URL(string: "https://api.github.com/repos/yilmazonline/PWMFixer/releases/latest")!,
             cachePolicy: .reloadIgnoringLocalCacheData,
             timeoutInterval: 15
         )
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.setValue("FlickerGuard/\(AppInfo.version)", forHTTPHeaderField: "User-Agent")
+        request.setValue("PWMFixer/\(AppInfo.version)", forHTTPHeaderField: "User-Agent")
         let (data, response) = try await URLSession.shared.data(for: request)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else {
             throw URLError(.badServerResponse)

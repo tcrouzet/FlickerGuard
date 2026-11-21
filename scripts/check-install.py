@@ -17,24 +17,24 @@ args = sys.argv[1:]
 with open(os.environ["INSTALL_CHECK_LOG"], "a") as log:
     log.write(json.dumps([name, *args]) + "\n")
 if name == "curl":
-    assert "https://github.com/tcrouzet/FlickerGuard/releases/latest/download/FlickerGuard.app.zip" in args
+    assert "https://github.com/yilmazonline/PWMFixer/releases/latest/download/PWMFixer.app.zip" in args
     assert args[args.index("--proto") + 1] == "=https"
     assert args[args.index("--proto-redir") + 1] == "=https"
     if os.environ["INSTALL_CHECK_CASE"] == "download failure":
         sys.exit(22)
     shutil.copyfile(os.environ["INSTALL_CHECK_ARCHIVE"], args[args.index("--output") + 1])
 elif name == "mv":
-    if os.environ["INSTALL_CHECK_CASE"] == "replacement failure" and args[0].endswith("/unpacked/FlickerGuard.app"):
+    if os.environ["INSTALL_CHECK_CASE"] == "replacement failure" and args[0].endswith("/unpacked/PWMFixer.app"):
         sys.exit(1)
     os.execv("/bin/mv", ["mv", *args])
 elif name == "open":
     assert args == [os.environ["INSTALL_CHECK_DESTINATION"]]
-    assert pathlib.Path(args[0], "Contents/MacOS/FlickerGuard").is_file()
+    assert pathlib.Path(args[0], "Contents/MacOS/PWMFixer").is_file()
     assert subprocess.run(["pgrep", "-u", str(os.getuid()), "-x", os.environ["INSTALL_CHECK_PROCESS"]], capture_output=True).returncode == 1
 elif name == "pgrep":
     sys.exit(2)
 elif name == "tccutil":
-    assert args == ["reset", "Accessibility", "com.tcrouzet.FlickerGuard"]
+    assert args == ["reset", "Accessibility", "com.yilmazonline.PWMFixer"]
     assert subprocess.run(["pgrep", "-u", str(os.getuid()), "-x", os.environ["INSTALL_CHECK_PROCESS"]], capture_output=True).returncode == 1
     destination = pathlib.Path(os.environ["INSTALL_CHECK_DESTINATION"])
     assert not destination.exists() or (destination / "old-marker").is_file()
@@ -44,23 +44,23 @@ elif name == "tccutil":
 cases = ["first install", "running update", "download failure", "invalid archive",
          "invalid signature", "wrong identifier", "quit refused", "replacement failure", "process lookup failure", "reset failure"]
 for case in cases:
-    with tempfile.TemporaryDirectory(prefix="FlickerGuard install check ") as folder:
+    with tempfile.TemporaryDirectory(prefix="PWMFixer install check ") as folder:
         root = Path(folder)
         applications = root / "Applications"
         applications.mkdir()
-        destination = applications / "FlickerGuard.app"
+        destination = applications / "PWMFixer.app"
         if case != "first install":
             destination.mkdir()
             (destination / "old-marker").write_text("previous version")
-        app = root / "fixture/FlickerGuard.app"
+        app = root / "fixture/PWMFixer.app"
         (app / "Contents/MacOS").mkdir(parents=True)
         (app / "Contents/Resources").mkdir()
-        binary = app / "Contents/MacOS/FlickerGuard"
+        binary = app / "Contents/MacOS/PWMFixer"
         shutil.copyfile("/usr/bin/true", binary)
         binary.chmod(0o755)
         with (app / "Contents/Info.plist").open("wb") as stream:
-            plistlib.dump({"CFBundleIdentifier": "other.application" if case == "wrong identifier" else "com.tcrouzet.FlickerGuard",
-                          "CFBundleExecutable": "FlickerGuard", "CFBundlePackageType": "APPL",
+            plistlib.dump({"CFBundleIdentifier": "other.application" if case == "wrong identifier" else "com.yilmazonline.PWMFixer",
+                          "CFBundleExecutable": "PWMFixer", "CFBundlePackageType": "APPL",
                           "CFBundleShortVersionString": "9.8.7"}, stream)
         resource = app / "Contents/Resources/value.txt"
         resource.write_text("original resource")
@@ -79,7 +79,7 @@ for case in cases:
             executable.chmod(0o755)
         process_name = "FGI" + secrets.token_hex(4)
         script = source.read_text().replace("/Applications/", f"{applications}/")
-        script = script.replace('-x FlickerGuard', f'-x {process_name}')
+        script = script.replace('-x PWMFixer', f'-x {process_name}')
         installer = root / "install.sh"
         installer.write_text(script)
         log = root / "commands.jsonl"
@@ -109,7 +109,7 @@ for case in cases:
             assert bool([call for call in calls if call[0] == "open"]) == success, (case, calls)
             resets = [call for call in calls if call[0] == "tccutil"]
             should_reset = case in ["first install", "running update", "replacement failure", "reset failure"]
-            assert resets == ([["tccutil", "reset", "Accessibility", "com.tcrouzet.FlickerGuard"]] if should_reset else []), (case, resets)
+            assert resets == ([["tccutil", "reset", "Accessibility", "com.yilmazonline.PWMFixer"]] if should_reset else []), (case, resets)
             if success:
                 assert calls.index(resets[0]) < next(index for index, call in enumerate(calls) if call[0] == "mv")
             if success:
@@ -121,7 +121,7 @@ for case in cases:
             if process is not None:
                 should_quit = case in ["running update", "replacement failure", "reset failure"]
                 assert (process.poll() is not None) == should_quit, case
-            assert not list(applications.glob(".FlickerGuard-install.*")), case
+            assert not list(applications.glob(".PWMFixer-install.*")), case
         finally:
             if process is not None:
                 if process.poll() is None:

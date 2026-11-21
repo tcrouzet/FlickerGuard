@@ -1,6 +1,6 @@
 import IOKit.hidsystem
 import Testing
-@testable import FlickerGuard
+@testable import PWMFixer
 
 @Test func brightnessPressesAndRepeatsAdjustOnlyTheSoftwareLevel() {
     let subtype = Int16(NX_SUBTYPE_AUX_CONTROL_BUTTONS)

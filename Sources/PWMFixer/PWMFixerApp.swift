@@ -4,7 +4,7 @@ import SwiftUI
 import ServiceManagement
 
 @main
-struct FlickerGuardApp: App {
+struct PWMFixerApp: App {
     @NSApplicationDelegateAdaptor(MenuBarController.self) private var controller
 
     var body: some Scene {
@@ -26,7 +26,7 @@ private struct MenuBarIcon: View {
 
     var body: some View {
         Image(systemName: state.isActive ? "sun.max.fill" : "sun.max")
-            .accessibilityLabel("FlickerGuard")
+            .accessibilityLabel("PWMFixer")
     }
 }
 
@@ -76,7 +76,7 @@ private struct DiagnosticView: View {
                     .accessibilityHidden(true)
                     .frame(width: 40, height: 40)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("FlickerGuard").font(.headline)
+                    Text("PWMFixer").font(.headline)
                     Text(AppInfo.version).font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()

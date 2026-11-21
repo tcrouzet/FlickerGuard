@@ -1,4 +1,4 @@
-name: Release FlickerGuard
+name: Release PWMFixer
 
 on:
   push:
@@ -41,18 +41,18 @@ jobs:
           ruby -rpsych -e 'Psych.parse_file(".github/workflows/release.yml")'
           python3 - <<'PY'
           import os, pathlib, re
-          version = pathlib.Path("Sources/FlickerGuard/Resources/Version.txt").read_text().strip()
+          version = pathlib.Path("Sources/PWMFixer/Resources/Version.txt").read_text().strip()
           assert re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", version)
           assert version == os.environ["RELEASE_TAG"]
           PY
           swift test
           python3 scripts/build-app.py
-          codesign --verify --strict .build/FlickerGuard.app
+          codesign --verify --strict .build/PWMFixer.app
 
       - name: Attest build provenance
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
-          subject-path: .build/FlickerGuard.app.zip
+          subject-path: .build/PWMFixer.app.zip
 
       - name: Publish app
         env:
@@ -60,19 +60,19 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          printf '[Download FlickerGuard.app.zip](https://github.com/tcrouzet/FlickerGuard/releases/download/%s/FlickerGuard.app.zip)\n\n' "$RELEASE_TAG" > .build/release-notes.md
+          printf '[Download PWMFixer.app.zip](https://github.com/yilmazonline/PWMFixer/releases/download/%s/PWMFixer.app.zip)\n\n' "$RELEASE_TAG" > .build/release-notes.md
           cat >> .build/release-notes.md <<'NOTES'
-          Requires macOS 27 or later and Apple Silicon. Unzip the download, move FlickerGuard.app to Applications, and open it. Click the sun in the menu bar to enable dimming.
+          Requires macOS 27 or later and Apple Silicon. Unzip the download, move PWMFixer.app to Applications, and open it. Click the sun in the menu bar to enable dimming.
 
           Supports the built-in OLED displays of the 14-inch and 16-inch MacBook Pro with PROLED XDR.
 
           The app is not notarized by Apple. If macOS blocks the first launch, use System Settings → Privacy & Security → Open Anyway.
 
-          After installing or updating, open the app from Applications, click Enable, and allow FlickerGuard in System Settings → Privacy & Security → Accessibility. Then quit and reopen it. An older authorization may need to be reset even if the switch is already on: see the [installation instructions](https://github.com/tcrouzet/FlickerGuard#allow-accessibility-access).
+          After installing or updating, open the app from Applications, click Enable, and allow PWMFixer in System Settings → Privacy & Security → Accessibility. Then quit and reopen it. An older authorization may need to be reset even if the switch is already on: see the [installation instructions](https://github.com/yilmazonline/PWMFixer#allow-accessibility-access).
 
           To start with your Mac, turn on Launch at login in the app’s … menu and approve it in macOS Login Items if requested.
 
-          Build provenance: gh attestation verify FlickerGuard.app.zip --repo tcrouzet/FlickerGuard
+          Build provenance: gh attestation verify PWMFixer.app.zip --repo yilmazonline/PWMFixer
           NOTES
-          gh release create "$RELEASE_TAG" .build/FlickerGuard.app.zip \
-            --verify-tag --latest --title "FlickerGuard $RELEASE_TAG" --notes-file .build/release-notes.md
+          gh release create "$RELEASE_TAG" .build/PWMFixer.app.zip \
+            --verify-tag --latest --title "PWMFixer $RELEASE_TAG" --notes-file .build/release-notes.md

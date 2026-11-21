@@ -7,31 +7,31 @@ import sys
 import zipfile
 
 root = Path(__file__).resolve().parent.parent
-version = (root / "Sources/FlickerGuard/Resources/Version.txt").read_text().strip()
+version = (root / "Sources/PWMFixer/Resources/Version.txt").read_text().strip()
 if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
     raise SystemExit("Invalid application version")
 
 build = ["swift", "build", "--configuration", "release", "-debug-info-format", "none", *sys.argv[1:]]
 subprocess.run(build, cwd=root, check=True)
 binary_directory = Path(subprocess.check_output([*build, "--show-bin-path"], cwd=root, text=True).strip())
-app = root / ".build/FlickerGuard.app"
+app = root / ".build/PWMFixer.app"
 contents = app / "Contents"
 (contents / "MacOS").mkdir(parents=True, exist_ok=True)
 (contents / "Resources").mkdir(parents=True, exist_ok=True)
 # Replace the inode so rebuilding cannot truncate a running executable.
-staged_binary = contents / "MacOS/FlickerGuard.next"
-shutil.copy2(binary_directory / "FlickerGuard", staged_binary)
-staged_binary.replace(contents / "MacOS/FlickerGuard")
-resource_bundle = "FlickerGuard_FlickerGuard.bundle"
+staged_binary = contents / "MacOS/PWMFixer.next"
+shutil.copy2(binary_directory / "PWMFixer", staged_binary)
+staged_binary.replace(contents / "MacOS/PWMFixer")
+resource_bundle = "PWMFixer_PWMFixer.bundle"
 shutil.copytree(binary_directory / resource_bundle, contents / "Resources" / resource_bundle, dirs_exist_ok=True)
 shutil.copy2(root / "LICENSE", contents / "Resources/LICENSE")
 iconset = root / ".build/AppIcon.iconset"
 subprocess.run(["swift", str(root / "scripts/create-icon.swift"), str(iconset)], cwd=root, check=True)
 subprocess.run(["iconutil", "--convert", "icns", "--output", str(contents / "Resources/AppIcon.icns"), str(iconset)], check=True)
 info = {
-    "CFBundleIdentifier": "com.tcrouzet.FlickerGuard",
-    "CFBundleName": "FlickerGuard",
-    "CFBundleExecutable": "FlickerGuard",
+    "CFBundleIdentifier": "com.yilmazonline.PWMFixer",
+    "CFBundleName": "PWMFixer",
+    "CFBundleExecutable": "PWMFixer",
     "CFBundlePackageType": "APPL",
     "CFBundleIconFile": "AppIcon.icns",
     "CFBundleShortVersionString": version,
@@ -49,12 +49,12 @@ for language in info["CFBundleLocalizations"]:
 assert (contents / "Resources" / resource_bundle / "Contents/Resources/Version.txt").read_text().strip() == version
 subprocess.run(["codesign", "--force", "--sign", "-", "--identifier", info["CFBundleIdentifier"], str(app)], check=True)
 subprocess.run(["codesign", "--verify", "--strict", str(app)], check=True)
-archive = root / ".build/FlickerGuard.app.zip"
+archive = root / ".build/PWMFixer.app.zip"
 subprocess.run(["ditto", "-c", "-k", "--norsrc", "--keepParent", str(app), str(archive)], check=True)
 with zipfile.ZipFile(archive) as package:
     assert package.testzip() is None
-    assert all(name.startswith("FlickerGuard.app/") for name in package.namelist())
-    for required in ["Contents/MacOS/FlickerGuard", "Contents/Info.plist", "Contents/Resources/AppIcon.icns"]:
-        assert "FlickerGuard.app/" + required in package.namelist()
+    assert all(name.startswith("PWMFixer.app/") for name in package.namelist())
+    for required in ["Contents/MacOS/PWMFixer", "Contents/Info.plist", "Contents/Resources/AppIcon.icns"]:
+        assert "PWMFixer.app/" + required in package.namelist()
 print(app)
 print(archive)

@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import FlickerGuard
+@testable import PWMFixer
 
 private func catalog(_ language: String) throws -> [String: String] {
     let url = try #require(AppInfo.resources.url(forResource: "Localizable", withExtension: "strings", subdirectory: nil, localization: language))
@@ -29,7 +29,7 @@ private func catalog(_ language: String) throws -> [String: String] {
 
 @Test func allLiteralTranslationKeysExistInBothCatalogs() throws {
     let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-    let sources = root.appendingPathComponent("Sources/FlickerGuard")
+    let sources = root.appendingPathComponent("Sources/PWMFixer")
     let files = try #require(FileManager.default.enumerator(at: sources, includingPropertiesForKeys: nil))
     let keys = Set(try catalog("en").keys)
     let pattern = #/tr\("([A-Za-z][A-Za-z0-9_.]*)"/#
