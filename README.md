@@ -1,8 +1,8 @@
 # PWMFixer
 
-> **Project abandoned**
+> **Fork notice**
 >
-> I am abandoning PWMFixer because the app does not solve the flickering problem on my OLED MacBook Pro. Keeping hardware brightness at 100% and dimming in software did not resolve my eye discomfort. I am returning the Mac and will wait for Apple to address the problem.
+> PWMFixer is a maintained fork of [FlickerGuard](https://github.com/tcrouzet/FlickerGuard) by Thierry Crouzet, who stopped developing it. The absence of flicker has not been measured with instruments; whether it helps depends on the person.
 
 PWMFixer is for people who experience discomfort from PWM flickering on the new OLED MacBook Pro displays. PWM (pulse-width modulation) controls brightness by rapidly pulsing the display’s light output, which can bother people sensitive to flicker.
 
